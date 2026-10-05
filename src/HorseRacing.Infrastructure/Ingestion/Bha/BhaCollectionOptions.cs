@@ -4,10 +4,10 @@ public sealed class BhaCollectionOptions
 {
     public const string SectionName = "BhaCollection";
 
-    public string CollectorVersion { get; init; } = "1.7.0";
+    public string CollectorVersion { get; init; } = "1.8.0";
 
     public string UserAgent { get; init; } =
-        "HorseRacingLocalCollector/1.7 (+https://github.com/kelvindavies11/Horse-Racing)";
+        "HorseRacingLocalCollector/1.8 (+https://github.com/kelvindavies11/Horse-Racing)";
 
     public int RequestTimeoutSeconds { get; init; } = 30;
 
@@ -249,6 +249,64 @@ public sealed class BhaCollectionOptions
             JobName = "bha-trainers-non-runners-jump-api",
             SourceName = "BHA jump trainers non-runners API",
             SourceUrl = "https://api09.horseracing.software/bha/v1/trainers/nonrunners?type=jump",
+            MinimumRequestIntervalSeconds = 10,
+            MaximumResponseBytes = 20_000_000
+        }
+    ];
+
+    public List<BhaRawSourceOptions> OwnerPageSources { get; init; } =
+    [
+        new()
+        {
+            JobName = "bha-owners-page",
+            SourceName = "BHA owners championship page",
+            SourceUrl = "https://www.britishhorseracing.com/racing/participants/owners/",
+            MinimumRequestIntervalSeconds = 10,
+            MaximumResponseBytes = 5_000_000
+        },
+        new()
+        {
+            JobName = "bha-all-owners-page",
+            SourceName = "BHA all owners page",
+            SourceUrl = "https://www.britishhorseracing.com/racing/participants/owners/all-owners/",
+            MinimumRequestIntervalSeconds = 10,
+            MaximumResponseBytes = 5_000_000
+        }
+    ];
+
+    public string? OwnerApiBearerToken { get; init; }
+
+    public List<BhaRawSourceOptions> OwnerApiSources { get; init; } =
+    [
+        new()
+        {
+            JobName = "bha-owners-championship-flat-api",
+            SourceName = "BHA flat owners championship API",
+            SourceUrl = "https://api09.horseracing.software/bha/v1/championships/owners?type=flat&per_page=5",
+            MinimumRequestIntervalSeconds = 10,
+            MaximumResponseBytes = 20_000_000
+        },
+        new()
+        {
+            JobName = "bha-owners-championship-jump-api",
+            SourceName = "BHA jump owners championship API",
+            SourceUrl = "https://api09.horseracing.software/bha/v1/championships/owners?type=jump&per_page=5",
+            MinimumRequestIntervalSeconds = 10,
+            MaximumResponseBytes = 20_000_000
+        },
+        new()
+        {
+            JobName = "bha-owners-list-flat-api",
+            SourceName = "BHA flat owners list API",
+            SourceUrl = "https://api09.horseracing.software/bha/v1/championships/owners?type=flat&sort=rank:asc&page=1&per_page=100",
+            MinimumRequestIntervalSeconds = 10,
+            MaximumResponseBytes = 20_000_000
+        },
+        new()
+        {
+            JobName = "bha-owners-list-jump-api",
+            SourceName = "BHA jump owners list API",
+            SourceUrl = "https://api09.horseracing.software/bha/v1/championships/owners?type=jump&sort=rank:asc&page=1&per_page=100",
             MinimumRequestIntervalSeconds = 10,
             MaximumResponseBytes = 20_000_000
         }

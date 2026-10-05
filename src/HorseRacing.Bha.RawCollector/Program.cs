@@ -32,7 +32,7 @@ Console.CancelKeyPress += (_, eventArgs) =>
 
 logger.LogInformation(
     "Starting BHA raw collection. This collector is restricted to local, non-commercial use " +
-    "of reviewed BHA racecourse, fixture, racecard, racehorse, jockey, trainer " +
+    "of reviewed BHA racecourse, fixture, racecard, racehorse, jockey, trainer, owner " +
     "and racing status sources.");
 
 var sources = new List<RawSourceToCollect>();
@@ -142,6 +142,20 @@ var trainerApiClient = scope.ServiceProvider.GetRequiredService<BhaTrainerApiCli
 foreach (var trainerApiSource in options.TrainerApiSources.Where(source => source.Enabled))
 {
     sources.Add(new RawSourceToCollect(trainerApiSource, trainerApiClient));
+}
+
+var ownerPageClient = scope.ServiceProvider.GetRequiredService<BhaOwnerPageClient>();
+
+foreach (var ownerPageSource in options.OwnerPageSources.Where(source => source.Enabled))
+{
+    sources.Add(new RawSourceToCollect(ownerPageSource, ownerPageClient));
+}
+
+var ownerApiClient = scope.ServiceProvider.GetRequiredService<BhaOwnerApiClient>();
+
+foreach (var ownerApiSource in options.OwnerApiSources.Where(source => source.Enabled))
+{
+    sources.Add(new RawSourceToCollect(ownerApiSource, ownerApiClient));
 }
 
 var racingStatusPageClient =
