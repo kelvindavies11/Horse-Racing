@@ -1,4 +1,5 @@
 using HorseRacing.Domain.Entities;
+using HorseRacing.Infrastructure.Ingestion.Raw;
 using Microsoft.EntityFrameworkCore;
 
 namespace HorseRacing.Infrastructure.Persistence;
@@ -6,6 +7,10 @@ namespace HorseRacing.Infrastructure.Persistence;
 public sealed class HorseRacingDbContext(DbContextOptions<HorseRacingDbContext> options)
     : DbContext(options)
 {
+    public DbSet<RawCollectionRun> RawCollectionRuns => Set<RawCollectionRun>();
+
+    public DbSet<RawPayload> RawPayloads => Set<RawPayload>();
+
     public DbSet<Horse> Horses => Set<Horse>();
 
     public DbSet<Jockey> Jockeys => Set<Jockey>();

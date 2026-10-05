@@ -51,11 +51,22 @@ British Horseracing Authority website
 - Promote validated and mapped records from raw storage into the created layer.
 - Preserve enough provenance to trace every created record back to its raw input and BHA source.
 
+The first implemented job is the manually run `HorseRacing.Bha.RawCollector` .NET console
+application. It is restricted to one reviewed public BHA racecourses page and writes only
+to the PostgreSQL `raw` schema. It captures source responses; it does not parse or promote
+racecourse records.
+
 ### Raw data layer
 
 - Stores the source data as it was collected, before application-specific interpretation.
 - Provides the evidence needed to diagnose scraper or transformation behaviour and to reprocess data.
 - Records an audit event whenever a source payload is written, including its source and collection/job context.
+
+The implemented Raw foundation uses `raw.payloads` for exact response bytes and response
+metadata, and `raw.collection_runs` for source-to-Raw outcomes and errors. Raw-to-Created
+conversion remains a separate, not-yet-implemented executable process. That process will
+read Raw rows, write Created/Curated rows and promotion audit records, and will not mutate
+Raw evidence.
 
 ### Created data layer
 
@@ -152,4 +163,4 @@ Source-code dependencies must point inwards. Domain must not reference Applicati
 
 ## Current scope
 
-This remains a scaffold. The expanded domain and its PostgreSQL relationships are implemented; [the data dictionary](DATA-DICTIONARY.md) and [generated SQL](sql/DOMAIN-SCHEMA.sql) describe that implementation. The React website foundation is implemented against representative data behind a typed repository. The local scraping jobs, raw layer, created layer, audit/lineage records, domain-projection job, live website data, and prediction views are planned. Result ingestion, revision history, authentication, operational observability and deployment remain future work. [Project status](PROJECT-STATUS.md) records executed verification gates. Consult [source links](SOURCE-LINKS.md) for research provenance.
+This remains a scaffold. The expanded domain and its PostgreSQL relationships are implemented; [the data dictionary](DATA-DICTIONARY.md) and [generated SQL](sql/DOMAIN-SCHEMA.sql) describe that implementation. The React website foundation is implemented against representative data behind a typed repository. The first manual BHA page collector, immutable Raw payload table, and source-to-Raw audit table are implemented. Source parsing, Raw-to-Created processing, Created storage and promotion audit/lineage remain planned, as do additional/scheduled collectors, domain-projection, live website data, and prediction views. Result ingestion, revision history, authentication, operational observability and deployment remain future work. [Project status](PROJECT-STATUS.md) records executed verification gates. Consult [source links](SOURCE-LINKS.md) for research provenance.

@@ -43,7 +43,7 @@ dotnet ef database update InitialCreate --project src/HorseRacing.Infrastructure
 
 Reapplying the expansion after a populated downgrade requires the same source-backed mapping. Migration history is retained; the original migration is unchanged.
 
-## Planned data layers
+## Data layers
 
 The target architecture adds three logical data boundaries. These are logical responsibilities; the implementation may use PostgreSQL schemas or another explicit separation when it is built.
 
@@ -55,7 +55,17 @@ The target architecture adds three logical data boundaries. These are logical re
 
 Raw ingestion and raw-to-created promotion both require audit records. A created record must link to its source/raw lineage and include `FirstObserved` and `LastObserved`. `FirstObserved` is retained from the record's initial identification; `LastObserved` advances whenever the same source object is seen again successfully.
 
-All eleven implemented tables belong to the domain persistence model. Raw, Created, audit and source-identity mapping storage have not yet been implemented.
+All eleven domain tables use the default `public` schema. The `AddRawIngestion` migration
+adds `raw.collection_runs` and `raw.payloads`: the former records source-to-Raw results and
+errors, while the latter stores immutable response bytes, source/HTTP metadata and a
+SHA-256 hash. The tables and constraints are documented in the
+[data dictionary](DATA-DICTIONARY.md); operating instructions are in the
+[BHA Raw collector guide](BHA-RAW-COLLECTOR.md).
+
+Created/Curated tables, promotion audit, and source-identity mapping are not implemented.
+They must be owned by a separate Raw-to-Curated process that reads Raw records without
+modifying them. Domain persistence remains a later projection target rather than the Raw
+collector's output.
 
 Prediction persistence is intentionally left open until the future prediction process and its outputs are defined. Prediction results will be served to the React website through the local API rather than read directly from storage.
 

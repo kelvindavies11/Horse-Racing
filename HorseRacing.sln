@@ -10,7 +10,11 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HorseRacing.Infrastructure"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HorseRacing.Api", "src\HorseRacing.Api\HorseRacing.Api.csproj", "{13132F02-8C49-4F66-8A8D-12CF66C64B19}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HorseRacing.Bha.RawCollector", "src\HorseRacing.Bha.RawCollector\HorseRacing.Bha.RawCollector.csproj", "{B39EAF99-9D11-4001-BEC6-EF0F4469A82D}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HorseRacing.Domain.UnitTests", "tests\HorseRacing.Domain.UnitTests\HorseRacing.Domain.UnitTests.csproj", "{3CE1A8AC-75A1-455B-A371-22796E159D8D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HorseRacing.Application.UnitTests", "tests\HorseRacing.Application.UnitTests\HorseRacing.Application.UnitTests.csproj", "{16755718-6266-4ACC-86B1-3F9003D08662}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -34,9 +38,17 @@ Global
 		{13132F02-8C49-4F66-8A8D-12CF66C64B19}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{13132F02-8C49-4F66-8A8D-12CF66C64B19}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{13132F02-8C49-4F66-8A8D-12CF66C64B19}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B39EAF99-9D11-4001-BEC6-EF0F4469A82D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B39EAF99-9D11-4001-BEC6-EF0F4469A82D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B39EAF99-9D11-4001-BEC6-EF0F4469A82D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B39EAF99-9D11-4001-BEC6-EF0F4469A82D}.Release|Any CPU.Build.0 = Release|Any CPU
 		{3CE1A8AC-75A1-455B-A371-22796E159D8D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{3CE1A8AC-75A1-455B-A371-22796E159D8D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3CE1A8AC-75A1-455B-A371-22796E159D8D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3CE1A8AC-75A1-455B-A371-22796E159D8D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{16755718-6266-4ACC-86B1-3F9003D08662}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{16755718-6266-4ACC-86B1-3F9003D08662}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{16755718-6266-4ACC-86B1-3F9003D08662}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{16755718-6266-4ACC-86B1-3F9003D08662}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

@@ -574,3 +574,92 @@ BEGIN
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261005152258_AddRawIngestion') THEN
+        IF NOT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname = 'raw') THEN
+            CREATE SCHEMA raw;
+        END IF;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261005152258_AddRawIngestion') THEN
+    CREATE TABLE raw.collection_runs (
+        id uuid NOT NULL,
+        job_name character varying(100) NOT NULL,
+        source_name character varying(200) NOT NULL,
+        source_url character varying(2048) NOT NULL,
+        collector_version character varying(50) NOT NULL,
+        started_at_utc timestamp with time zone NOT NULL,
+        completed_at_utc timestamp with time zone,
+        outcome character varying(20) NOT NULL,
+        http_status_code integer,
+        error_code character varying(100),
+        error_message character varying(2000),
+        CONSTRAINT "PK_collection_runs" PRIMARY KEY (id),
+        CONSTRAINT ck_raw_collection_runs_completion CHECK ((outcome = 'Running' AND completed_at_utc IS NULL) OR (outcome <> 'Running' AND completed_at_utc IS NOT NULL)),
+        CONSTRAINT ck_raw_collection_runs_outcome CHECK (outcome IN ('Running', 'Succeeded', 'Failed', 'Cancelled'))
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261005152258_AddRawIngestion') THEN
+    CREATE TABLE raw.payloads (
+        id uuid NOT NULL,
+        collection_run_id uuid NOT NULL,
+        source_url character varying(2048) NOT NULL,
+        effective_url character varying(2048) NOT NULL,
+        retrieved_at_utc timestamp with time zone NOT NULL,
+        http_status_code integer NOT NULL,
+        media_type character varying(200),
+        character_encoding character varying(100),
+        entity_tag character varying(500),
+        last_modified_utc timestamp with time zone,
+        sha256 character(64) NOT NULL,
+        content_length bigint NOT NULL,
+        content bytea NOT NULL,
+        CONSTRAINT "PK_payloads" PRIMARY KEY (id),
+        CONSTRAINT ck_raw_payloads_content_length CHECK (content_length = octet_length(content)),
+        CONSTRAINT ck_raw_payloads_http_status_code CHECK (http_status_code BETWEEN 100 AND 599),
+        CONSTRAINT ck_raw_payloads_sha256 CHECK (sha256 ~ '^[0-9a-f]{64}$'),
+        CONSTRAINT "FK_payloads_collection_runs_collection_run_id" FOREIGN KEY (collection_run_id) REFERENCES raw.collection_runs (id) ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261005152258_AddRawIngestion') THEN
+    CREATE INDEX ix_raw_collection_runs_source_started ON raw.collection_runs (source_url, started_at_utc);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261005152258_AddRawIngestion') THEN
+    CREATE INDEX ix_raw_payloads_sha256 ON raw.payloads (sha256);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261005152258_AddRawIngestion') THEN
+    CREATE UNIQUE INDEX ux_raw_payloads_collection_run ON raw.payloads (collection_run_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261005152258_AddRawIngestion') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20261005152258_AddRawIngestion', '10.0.12');
+    END IF;
+END $EF$;
+COMMIT;
+
