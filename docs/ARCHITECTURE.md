@@ -118,7 +118,8 @@ HorseRacing.Application
 
 - Owns racing entities and invariants.
 - Contains no ASP.NET Core, Entity Framework Core, or PostgreSQL references.
-- Currently models `Race`, `Racecourse`, `Horse`, and `Runner`.
+- Models Racecourse, Meeting, Race, Horse, Stable, Trainer, Owner, Jockey, Runner, RaceResult and RunnerResult. Definitions, aggregate boundaries and remaining gaps are in the [domain dictionary](DOMAIN-MODEL.md).
+- Race owns declarations and its current result. Connection references on runners preserve the race-time trainer, owner, jockey and stable identities. Meeting and the reference entities are separate aggregates.
 
 ### Application
 
@@ -151,4 +152,4 @@ Source-code dependencies must point inwards. Domain must not reference Applicati
 
 ## Current scope
 
-This is an initial scaffold, not a completed product. The current code contains the Clean Architecture projects, initial domain model, API, and domain persistence. The local scraping jobs, raw layer, created layer, audit and lineage records, domain-projection job, locally hosted React website, and prediction views described above are planned but not yet implemented. Authentication, race-result capture, operational observability, and deployment remain future work. Build and test gates are recorded as **IN PROGRESS** until they are actually run.
+This remains a scaffold. The expanded domain and its PostgreSQL relationships are implemented; [the data dictionary](DATA-DICTIONARY.md) and [generated SQL](sql/DOMAIN-SCHEMA.sql) describe that implementation. The local scraping jobs, raw layer, created layer, audit/lineage records, domain-projection job, React website and prediction views are planned. Result ingestion, revision history, authentication, operational observability and deployment remain future work. [Project status](PROJECT-STATUS.md) records executed verification gates. Consult [source links](SOURCE-LINKS.md) for research provenance.

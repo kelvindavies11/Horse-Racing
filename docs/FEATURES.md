@@ -2,7 +2,7 @@
 
 This document is the durable product backlog for the Horse Racing project. It describes intended work, not implemented capability. Completion is shown only by checked items backed by working software and verification evidence.
 
-The current code models racecourses, races, horses, and runners. Meetings, jockeys, trainers, stables, owners, race results, and runner results are target domain concepts that still require modelling. In this backlog, **Created layer** always means the validated, consistently shaped source-data read model; it is distinct from domain persistence.
+The current domain foundation models eleven entities: racecourses, meetings, races, horses, stables, trainers, owners, jockeys, runners, race results and runner results. See the [domain dictionary](DOMAIN-MODEL.md), [data dictionary](DATA-DICTIONARY.md), [PostgreSQL SQL](sql/DOMAIN-SCHEMA.sql), [source links](SOURCE-LINKS.md) and [verification evidence](PROJECT-STATUS.md). This does not mean any ingestion slice below is complete. In this backlog, **Created layer** always means the validated, consistently shaped source-data read model; it is distinct from domain persistence.
 
 ## Product principles
 
@@ -90,14 +90,14 @@ Each feature below is independently deliverable and must complete the entire sli
 - [ ] **Trainers** — use the repository/domain term *trainer* (not coach); define identity independently of mutable display names and retain profile/status details available from BHA. Dependencies: shared foundations.
 - [ ] **Jockeys** — define identity, name variants, status and available profile attributes; do not merge homonyms without evidence. Dependencies: shared foundations.
 - [ ] **Owners** — define person/organisation identity and display-name normalization without assuming names are unique. Dependencies: shared foundations.
-- [ ] **Stables** — discover whether BHA exposes a durable stable identity and clarify its relationship to trainers before modelling; mark unavailable fields explicitly rather than inferring them. Dependencies: trainers and source discovery.
+- [ ] **Stables** — discover whether BHA exposes a durable stable identity and validate the modelled trainer/yard relationship against source evidence; mark unavailable fields explicitly rather than inferring them. Dependencies: trainers and source discovery.
 - [ ] **Horses** — define identity using a durable BHA identifier where available, with name, country, foaling, status and available connections to owner/trainer/stable represented as observed relationships. Dependencies: relevant reference slices, or explicit unresolved-reference handling.
 
 ### Racing records
 
-- [ ] **Meetings** — introduce the target Created/domain concept, stable identity, date/status and racecourse relationship; handle abandonment, postponement, and rescheduling without identity churn. Dependencies: racecourses.
+- [ ] **Meetings** — map the implemented domain concept into Created records with stable source identity, date/status and racecourse relationship; handle abandonment, postponement, and rescheduling without identity churn. Dependencies: racecourses.
 - [ ] **Races** — identify a race within its meeting, capture scheduled/actual timing, name/type/class/distance/status and other available conditions, and reconcile reschedules/cancellations. Dependencies: meetings and racecourses.
-- [ ] **Runners and entries** — model declarations/entries as time-varying participation, including horse and available jockey/trainer/owner links, cloth/draw, weight, odds and non-runner state without overwriting observation history. Dependencies: races, horses, and applicable reference entities.
+- [ ] **Runners and entries** — design pre-declaration entries separately from implemented Runner declarations; preserve time-varying participation, including horse and available jockey/trainer/owner/race-time stable links, cloth/draw, weight, odds and non-runner state without overwriting observation history. Dependencies: races, horses, and applicable reference entities.
 - [ ] **Race results** — capture race-level result facts such as outcome/status, timing and result publication/correction state, preserving later official corrections as new observations. Dependencies: races.
 - [ ] **Runner results** — capture finishing position or non-finish code, distances, starting price and other available performance facts; link unambiguously to the race result and runner/horse. Dependencies: race results and runners/entries.
 
@@ -130,7 +130,7 @@ Each feature below is independently deliverable and must complete the entire sli
 - [ ] Define how each completed Created layer entity maps to domain entities and relationships, including the target concepts not present in the current code.
 - [ ] Implement an idempotent local projection job with its own run status, errors, Created identifiers, and domain identifiers.
 - [ ] Handle late-arriving references and corrections without coupling Created layer availability to successful domain projection.
-- [ ] Add domain invariants and tests for meetings, participants, ownership/stable relationships, race results, and runner results as those slices are introduced.
+- [ ] Extend the existing domain invariants and tests with source-driven cases, temporal ownership/stable assignments, pre-declaration entries and result revisions as those slices are introduced.
 
 ### Epic acceptance criteria
 

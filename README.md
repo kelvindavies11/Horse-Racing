@@ -41,7 +41,12 @@ docs/
   ARCHITECTURE.md
   DATABASE.md
   DEVELOPMENT-WORKFLOW.md
+  DOMAIN-MODEL.md
+  DATA-DICTIONARY.md
+  SOURCE-LINKS.md
+  FEATURES.md
   PROJECT-STATUS.md
+  sql/DOMAIN-SCHEMA.sql
 ```
 
 Dependencies point inwards: `Api -> Infrastructure/Application -> Domain`. The Domain project has no framework or database dependency.
@@ -65,7 +70,7 @@ When the verification gates are ready to be run:
 dotnet restore
 dotnet build --no-restore
 dotnet test --no-build
-dotnet ef database update --project src/HorseRacing.Infrastructure --startup-project src/HorseRacing.Api
+dotnet ef database update --project src/HorseRacing.Infrastructure --startup-project src/HorseRacing.Infrastructure
 dotnet run --project src/HorseRacing.Api
 ```
 
@@ -73,6 +78,10 @@ The local API defaults to `http://localhost:5080`. Its basic health endpoint is 
 
 ## Current status
 
-The implementation is **IN PROGRESS**. The solution, initial domain database model, and initial migration are present. The scraping jobs, raw and created data layers, audit trail, domain-projection job, locally hosted React website, and future prediction views are target architecture and are not yet implemented. Build, test, and migration-application gates have not yet been run. See [Project status](docs/PROJECT-STATUS.md) for the explicit gate record.
+The implementation is **IN PROGRESS**. The domain now covers racecourses, meetings, races, horses, stables, trainers, owners, jockeys, runners and race/runner results, with EF mappings, migration and PostgreSQL SQL. The scraping jobs, raw and created data layers, audit trail, domain-projection job, locally hosted React website, and future prediction views are planned. See [Project status](docs/PROJECT-STATUS.md) for actual verification evidence and remaining gaps.
+
+The [domain dictionary](docs/DOMAIN-MODEL.md) explains entities and relationships; the [data dictionary](docs/DATA-DICTIONARY.md) records physical columns and constraints. External references are in [source links](docs/SOURCE-LINKS.md), and planned delivery is in the [feature backlog](docs/FEATURES.md).
+
+The race creation request now uses `meetingId`, `raceNumber`, `name`, `scheduledStartUtc`, `code`, `surface`, and `distanceMetres`; it no longer accepts `racecourseId`. A meeting must already exist. This is still a scaffold endpoint, not a complete management API. Review [migration precautions](docs/DATABASE.md) before upgrading a populated database.
 
 Development branches from and merges back into `main`; see [Development workflow](docs/DEVELOPMENT-WORKFLOW.md).

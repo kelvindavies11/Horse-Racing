@@ -18,6 +18,8 @@ internal sealed class RaceRepository(HorseRacingDbContext dbContext) : IRaceRepo
     {
         return dbContext.Races
             .Include(race => race.Runners)
+            .Include(race => race.Result)
+                .ThenInclude(result => result!.RunnerResults)
             .SingleOrDefaultAsync(race => race.Id == raceId, cancellationToken);
     }
 }

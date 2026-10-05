@@ -1,4 +1,5 @@
 using HorseRacing.Application.Races.CreateRace;
+using HorseRacing.Domain.Enums;
 using HorseRacing.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -21,9 +22,13 @@ app.MapPost(
     {
         var raceId = await handler.HandleAsync(
             new CreateRaceCommand(
-                request.RacecourseId,
+                request.MeetingId,
+                request.RaceNumber,
                 request.Name,
-                request.ScheduledStartUtc),
+                request.ScheduledStartUtc,
+                request.Code,
+                request.Surface,
+                request.DistanceMetres),
             cancellationToken);
 
         return Results.Created($"/api/races/{raceId}", new { id = raceId });
@@ -32,8 +37,12 @@ app.MapPost(
 app.Run();
 
 public sealed record CreateRaceRequest(
-    Guid RacecourseId,
+    Guid MeetingId,
+    int RaceNumber,
     string Name,
-    DateTimeOffset ScheduledStartUtc);
+    DateTimeOffset ScheduledStartUtc,
+    RaceCode Code,
+    RacingSurface Surface,
+    int DistanceMetres);
 
 public partial class Program;

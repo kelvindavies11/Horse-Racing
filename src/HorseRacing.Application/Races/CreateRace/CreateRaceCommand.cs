@@ -1,6 +1,12 @@
+using HorseRacing.Domain.Enums;
+
 namespace HorseRacing.Application.Races.CreateRace;
 
 public sealed record CreateRaceCommand(
-    Guid RacecourseId,
+    Guid MeetingId,
+    int RaceNumber,
     string Name,
-    DateTimeOffset ScheduledStartUtc);
+    DateTimeOffset ScheduledStartUtc,
+    RaceCode Code,
+    RacingSurface Surface,
+    int DistanceMetres);

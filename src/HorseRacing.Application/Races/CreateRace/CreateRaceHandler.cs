@@ -12,9 +12,13 @@ public sealed class CreateRaceHandler(IRaceRepository raceRepository)
         ArgumentNullException.ThrowIfNull(command);
 
         var race = Race.Create(
-            command.RacecourseId,
+            command.MeetingId,
+            command.RaceNumber,
             command.Name,
-            command.ScheduledStartUtc);
+            command.ScheduledStartUtc,
+            command.Code,
+            command.Surface,
+            command.DistanceMetres);
 
         await raceRepository.AddAsync(race, cancellationToken);
         return race.Id;
