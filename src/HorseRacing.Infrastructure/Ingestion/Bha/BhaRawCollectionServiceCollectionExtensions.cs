@@ -103,6 +103,24 @@ public static class BhaRawCollectionServiceCollectionExtensions
             });
 
         services
+            .AddHttpClient<BhaRacehorseSearchPageClient>(ConfigureHttpClient)
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                AllowAutoRedirect = true,
+                MaxAutomaticRedirections = 3,
+                UseCookies = false
+            });
+
+        services
+            .AddHttpClient<BhaRacehorseApiClient>(ConfigureHttpClient)
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                AllowAutoRedirect = true,
+                MaxAutomaticRedirections = 3,
+                UseCookies = false
+            });
+
+        services
             .AddHttpClient<BhaRacingStatusPageClient>(ConfigureHttpClient)
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
             {
@@ -163,6 +181,12 @@ public static class BhaRawCollectionServiceCollectionExtensions
             && ValidateSourceOptions(
                 options.RacecardApiSources,
                 BhaRacecardApiClient.ValidateSourceUri)
+            && ValidateSourceOptions(
+                options.RacehorseSearchPage,
+                BhaRacehorseSearchPageClient.ValidateSourceUri)
+            && ValidateSourceOptions(
+                options.RacehorseApiSources,
+                BhaRacehorseApiClient.ValidateSourceUri)
             && ValidateSourceOptions(
                 options.RacingStatusPageSources,
                 BhaRacingStatusPageClient.ValidateSourceUri)

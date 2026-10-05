@@ -4,10 +4,10 @@ public sealed class BhaCollectionOptions
 {
     public const string SectionName = "BhaCollection";
 
-    public string CollectorVersion { get; init; } = "1.4.0";
+    public string CollectorVersion { get; init; } = "1.5.0";
 
     public string UserAgent { get; init; } =
-        "HorseRacingLocalCollector/1.4 (+https://github.com/kelvindavies11/Horse-Racing)";
+        "HorseRacingLocalCollector/1.5 (+https://github.com/kelvindavies11/Horse-Racing)";
 
     public int RequestTimeoutSeconds { get; init; } = 30;
 
@@ -108,6 +108,19 @@ public sealed class BhaCollectionOptions
     public string? RacecardApiBearerToken { get; init; }
 
     public List<BhaRawSourceOptions> RacecardApiSources { get; init; } = [];
+
+    public BhaRawSourceOptions RacehorseSearchPage { get; init; } = new()
+    {
+        JobName = "bha-racehorse-search-page",
+        SourceName = "BHA racehorse search page",
+        SourceUrl = "https://www.britishhorseracing.com/racing/horses/racehorse-search-results/",
+        MinimumRequestIntervalSeconds = 10,
+        MaximumResponseBytes = 5_000_000
+    };
+
+    public string? RacehorseApiBearerToken { get; init; }
+
+    public List<BhaRawSourceOptions> RacehorseApiSources { get; init; } = [];
 
     public List<BhaRawSourceOptions> RacingStatusPageSources { get; init; } =
     [
