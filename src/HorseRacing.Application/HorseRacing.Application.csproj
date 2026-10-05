@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>HorseRacing.Application</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\HorseRacing.Domain\HorseRacing.Domain.csproj" />
+  </ItemGroup>
+</Project>

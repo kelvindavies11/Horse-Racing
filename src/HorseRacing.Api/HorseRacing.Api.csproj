@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <RootNamespace>HorseRacing.Api</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\HorseRacing.Application\HorseRacing.Application.csproj" />
+    <ProjectReference Include="..\HorseRacing.Infrastructure\HorseRacing.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

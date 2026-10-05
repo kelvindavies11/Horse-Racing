@@ -1,0 +1,29 @@
+## .NET build output
+bin/
+obj/
+artifacts/
+TestResults/
+coverage/
+
+## IDE and user files
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Local configuration and secrets
+.env
+.env.*
+!.env.example
+appsettings.Local.json
+secrets.json
+
+## Operating-system files
+.DS_Store
+Thumbs.db
+
+## Docker data
+.postgres-data/
