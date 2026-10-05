@@ -32,7 +32,7 @@ Console.CancelKeyPress += (_, eventArgs) =>
 
 logger.LogInformation(
     "Starting BHA raw collection. This collector is restricted to local, non-commercial use " +
-    "of reviewed BHA racecourse sources.");
+    "of reviewed BHA racecourse and fixture sources.");
 
 var sources = new List<RawSourceToCollect>();
 
@@ -48,6 +48,36 @@ if (options.RacecoursesApi.Enabled)
     sources.Add(new RawSourceToCollect(
         options.RacecoursesApi,
         scope.ServiceProvider.GetRequiredService<BhaRacecoursesApiClient>()));
+}
+
+if (options.FixturesPage.Enabled)
+{
+    sources.Add(new RawSourceToCollect(
+        options.FixturesPage,
+        scope.ServiceProvider.GetRequiredService<BhaFixturesPageClient>()));
+}
+
+if (options.FixturesApi.Enabled)
+{
+    sources.Add(new RawSourceToCollect(
+        options.FixturesApi,
+        scope.ServiceProvider.GetRequiredService<BhaFixturesApiClient>()));
+}
+
+var fixtureCalendarClient =
+    scope.ServiceProvider.GetRequiredService<BhaFixtureCalendarClient>();
+
+foreach (var calendarSource in options.FixtureCalendarSources.Where(source => source.Enabled))
+{
+    sources.Add(new RawSourceToCollect(calendarSource, fixtureCalendarClient));
+}
+
+var fixtureListDownloadClient =
+    scope.ServiceProvider.GetRequiredService<BhaFixtureListDownloadClient>();
+
+foreach (var downloadSource in options.FixtureListDownloadSources.Where(source => source.Enabled))
+{
+    sources.Add(new RawSourceToCollect(downloadSource, fixtureListDownloadClient));
 }
 
 if (sources.Count == 0)

@@ -39,6 +39,42 @@ public static class BhaRawCollectionServiceCollectionExtensions
                 UseCookies = false
             });
 
+        services
+            .AddHttpClient<BhaFixturesPageClient>(ConfigureHttpClient)
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                AllowAutoRedirect = true,
+                MaxAutomaticRedirections = 3,
+                UseCookies = false
+            });
+
+        services
+            .AddHttpClient<BhaFixturesApiClient>(ConfigureHttpClient)
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                AllowAutoRedirect = true,
+                MaxAutomaticRedirections = 3,
+                UseCookies = false
+            });
+
+        services
+            .AddHttpClient<BhaFixtureCalendarClient>(ConfigureHttpClient)
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                AllowAutoRedirect = true,
+                MaxAutomaticRedirections = 3,
+                UseCookies = false
+            });
+
+        services
+            .AddHttpClient<BhaFixtureListDownloadClient>(ConfigureHttpClient)
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                AllowAutoRedirect = true,
+                MaxAutomaticRedirections = 3,
+                UseCookies = false
+            });
+
         return services;
     }
 
@@ -66,7 +102,30 @@ public static class BhaRawCollectionServiceCollectionExtensions
         return ValidateSourceOptions(options.RacecoursesPage, BhaPageClient.ValidateSourceUri)
             && ValidateSourceOptions(
                 options.RacecoursesApi,
-                BhaRacecoursesApiClient.ValidateSourceUri);
+                BhaRacecoursesApiClient.ValidateSourceUri)
+            && ValidateSourceOptions(options.FixturesPage, BhaFixturesPageClient.ValidateSourceUri)
+            && ValidateSourceOptions(options.FixturesApi, BhaFixturesApiClient.ValidateSourceUri)
+            && ValidateSourceOptions(
+                options.FixtureCalendarSources,
+                BhaFixtureCalendarClient.ValidateSourceUri)
+            && ValidateSourceOptions(
+                options.FixtureListDownloadSources,
+                BhaFixtureListDownloadClient.ValidateSourceUri);
+    }
+
+    private static bool ValidateSourceOptions(
+        IEnumerable<BhaRawSourceOptions> sourceOptions,
+        Action<Uri> validateUri)
+    {
+        foreach (var sourceOption in sourceOptions)
+        {
+            if (!ValidateSourceOptions(sourceOption, validateUri))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool ValidateSourceOptions(

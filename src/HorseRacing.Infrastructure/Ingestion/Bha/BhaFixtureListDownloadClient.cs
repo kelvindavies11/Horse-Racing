@@ -4,34 +4,25 @@ using Microsoft.Extensions.Options;
 
 namespace HorseRacing.Infrastructure.Ingestion.Bha;
 
-public sealed class BhaRacecoursesApiClient(
+public sealed class BhaFixtureListDownloadClient(
     HttpClient httpClient,
     IOptions<BhaCollectionOptions> options) : IRawSourceClient
 {
-    private static readonly Uri RacecoursesPageUri =
-        new("https://www.britishhorseracing.com/racing/racecourses/");
-
-    private readonly BhaRawSourceOptions _sourceOptions = options.Value.RacecoursesApi;
+    private readonly BhaCollectionOptions _options = options.Value;
 
     public async Task<RawSourceResponse> GetAsync(
         Uri sourceUri,
         CancellationToken cancellationToken)
     {
         ValidateSourceUri(sourceUri);
-
-        var bearerToken = BhaBearerToken.Normalize(_sourceOptions.BearerToken);
-        if (string.IsNullOrWhiteSpace(bearerToken))
-        {
-            throw new InvalidOperationException(
-                "The BHA racecourses API source requires an operator-supplied bearer token. " +
-                "Configure BhaCollection:RacecoursesApi:BearerToken outside source control.");
-        }
+        var sourceOptions = GetSourceOptions(sourceUri);
 
         using var request = new HttpRequestMessage(HttpMethod.Get, sourceUri);
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
-        request.Headers.Referrer = RacecoursesPageUri;
-        request.Headers.Add("Origin", "https://www.britishhorseracing.com");
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/pdf"));
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(
+            "application/vnd.ms-excel"));
 
         using var response = await httpClient.SendAsync(
             request,
@@ -42,17 +33,17 @@ public sealed class BhaRacecoursesApiClient(
         ValidateSourceUri(effectiveUri);
 
         var declaredLength = response.Content.Headers.ContentLength;
-        if (declaredLength > _sourceOptions.MaximumResponseBytes)
+        if (declaredLength > sourceOptions.MaximumResponseBytes)
         {
             throw new InvalidOperationException(
-                $"The BHA racecourses API response declared {declaredLength} bytes, " +
-                $"exceeding the configured limit of {_sourceOptions.MaximumResponseBytes} bytes.");
+                $"The BHA fixture-list download declared {declaredLength} bytes, " +
+                $"exceeding the configured limit of {sourceOptions.MaximumResponseBytes} bytes.");
         }
 
         var content = await BoundedHttpContentReader.ReadAsync(
             response.Content,
-            _sourceOptions.MaximumResponseBytes,
-            "BHA racecourses API",
+            sourceOptions.MaximumResponseBytes,
+            "BHA fixture-list download",
             cancellationToken);
 
         return new RawSourceResponse(
@@ -70,22 +61,38 @@ public sealed class BhaRacecoursesApiClient(
     {
         ArgumentNullException.ThrowIfNull(sourceUri);
 
+        var path = sourceUri.AbsolutePath;
+        var isSupportedFile = path.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
+
         if (!sourceUri.IsAbsoluteUri
             || !string.Equals(sourceUri.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal)
             || !string.Equals(
                 sourceUri.Host,
-                "api09.horseracing.software",
+                "media.britishhorseracing.com",
                 StringComparison.OrdinalIgnoreCase)
-            || !string.Equals(
-                sourceUri.AbsolutePath.TrimEnd('/'),
-                "/bha/v1/racecourses",
-                StringComparison.OrdinalIgnoreCase)
+            || !path.StartsWith(
+                "/bha/Fixture_List/",
+                StringComparison.Ordinal)
+            || !isSupportedFile
             || !string.IsNullOrEmpty(sourceUri.Query)
             || !string.IsNullOrEmpty(sourceUri.Fragment)
             || !string.IsNullOrEmpty(sourceUri.UserInfo))
         {
             throw new InvalidOperationException(
-                "This collector is restricted to the reviewed BHA racecourses API source.");
+                "This collector is restricted to reviewed BHA fixture-list download sources.");
         }
     }
+
+    private BhaRawSourceOptions GetSourceOptions(Uri sourceUri) =>
+        _options.FixtureListDownloadSources.Single(
+            source => source.Enabled
+                && Uri.TryCreate(source.SourceUrl, UriKind.Absolute, out var configuredUri)
+                && Uri.Compare(
+                    configuredUri,
+                    sourceUri,
+                    UriComponents.SchemeAndServer
+                        | UriComponents.Path,
+                    UriFormat.Unescaped,
+                    StringComparison.OrdinalIgnoreCase) == 0);
 }

@@ -7,7 +7,10 @@ Reviewed: 5 October 2026. These links were consulted for this domain review or i
 | Reference | Used for | Interpretation |
 | --- | --- | --- |
 | [BHA race planning](https://www.britishhorseracing.com/about/planning/) | Fixtures and race programmes | Meeting/fixture and individual race are separate concepts; fixtures may move. |
-| [BHA full-year fixtures](https://www.britishhorseracing.com/racing/fixtures/full-year/) | Fixture source discovery | Reference page; no extractor or stable external-ID contract verified yet. |
+| [BHA full-year fixtures](https://www.britishhorseracing.com/racing/fixtures/full-year/) | Fixture source discovery and raw page capture | Meeting/fixture source shell; conversion and stable Created identity remain future work. |
+| [BHA fixtures API](https://api09.horseracing.software/bha/v1/fixtures?per_page=250) | Fixture/meeting source payload discovered from the current BHA full-year fixtures page scripts | Requires a bearer token supplied outside source control; no token is committed or inferred as a licence. |
+| [BHA fixtures calendars](https://crate.horseracing.software/ics/fixtures?year=2026) | Public calendar fixture source for meeting-date evidence | Current collector defaults to reviewed 2026 and 2027 calendar URLs; update configuration and docs when year coverage changes. |
+| [BHA 2027 fixture list XLSX](https://media.britishhorseracing.com/bha/Fixture_List/2027-Fixture-list.xlsx) and [PDF](https://media.britishhorseracing.com/bha/Fixture_List/2027_Fixture_List.pdf) | Official fixture-list download raw evidence | Binary Raw payloads only; parsing and Created promotion are separate future work. |
 | [BHA racecourses](https://www.britishhorseracing.com/racing/racecourses/) | Venue reference data | Racecourse is a distinct entity; track details are additional scope. |
 | [BHA racecourses API](https://api09.horseracing.software/bha/v1/racecourses/) | Racecourse source payload discovered from the current BHA racecourses page scripts | Requires a bearer token supplied outside source control; no token is committed or inferred as a licence. |
 | [BHA robots.txt](https://www.britishhorseracing.com/robots.txt) | Racecourses-page collection policy, reviewed 5 October 2026 | Public path is not disallowed; `crawl-delay: 10` is enforced as the minimum interval. Re-review before adding a source. |

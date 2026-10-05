@@ -3,35 +3,45 @@
 Reviewed: 5 October 2026.
 
 `HorseRacing.Bha.RawCollector` is a manually run .NET console application. Its only
-responsibility is to request the reviewed BHA racecourse raw sources and persist each
-received source response and collection result in the PostgreSQL `raw` schema.
+responsibility is to request the reviewed BHA racecourse and fixture raw sources and
+persist each received source response and collection result in the PostgreSQL `raw` schema.
 
-It does **not** parse racecourses, create application records, or write to domain tables.
-Raw-to-Curated conversion is a separate process boundary: a future converter will read
-immutable `raw.payloads` rows and write validated, consistently shaped records to a
-separate Created/Curated schema. It must record its own attempt history and Raw lineage,
-and must never update a Raw payload in place.
+It does **not** parse racecourses or meetings, create application records, or write to
+domain tables. Raw-to-Curated conversion is a separate process boundary: a future
+converter will read immutable `raw.payloads` rows and write validated, consistently shaped
+records to a separate Created/Curated schema. It must record its own attempt history and
+Raw lineage, and must never update a Raw payload in place.
 
 ## Source and collection policy
 
-The collector is deliberately restricted in code to the reviewed racecourse sources:
+The collector is deliberately restricted in code to the reviewed racecourse and fixture
+sources:
 
 ```text
 https://www.britishhorseracing.com/racing/racecourses/
 https://api09.horseracing.software/bha/v1/racecourses/
+https://www.britishhorseracing.com/racing/fixtures/full-year/
+https://api09.horseracing.software/bha/v1/fixtures?per_page=250
+https://crate.horseracing.software/ics/fixtures?year=2026
+https://crate.horseracing.software/ics/fixtures?year=2027
+https://media.britishhorseracing.com/bha/Fixture_List/2027-Fixture-list.xlsx
+https://media.britishhorseracing.com/bha/Fixture_List/2027_Fixture_List.pdf
 ```
 
-The BHA page is publicly readable. Its current `robots.txt` allows this path and specifies
-`crawl-delay: 10`; the configured minimum interval for every enabled source therefore
-cannot be less than ten seconds. Each process performs one request per enabled source and
-has no concurrent fetches or automatic retries. The default timeout is 30 seconds. The
-default response limits are 5 MB for the HTML page and 10 MB for the racecourses API.
+The BHA website pages are publicly readable. Its current `robots.txt` does not disallow
+these public page paths and specifies `crawl-delay: 10`; the configured minimum interval
+for every enabled source therefore cannot be less than ten seconds. Each process performs
+one request per enabled source and has no concurrent fetches or automatic retries. The
+default timeout is 30 seconds. The default response limits are 5 MB for website pages and
+calendar feeds, 10 MB for the racecourses API, and 20 MB for the fixtures API and fixture
+list downloads.
 
-The racecourses API source is the JSON endpoint used by the current BHA racecourses page.
-It requires an operator-supplied bearer token. The repository must not contain that token
-or a copied token from public website JavaScript. Configure
-`BhaCollection:RacecoursesApi:BearerToken` through an environment variable, user secret or
-another local configuration source outside version control. If the API source is enabled
+The racecourses and fixtures API sources are the JSON endpoints used by the current BHA
+Angular pages. They require operator-supplied bearer tokens. The repository must not
+contain those tokens or copied tokens from public website JavaScript. Configure
+`BhaCollection:RacecoursesApi:BearerToken` and
+`BhaCollection:FixturesApi:BearerToken` through environment variables, user secrets or
+another local configuration source outside version control. If an API source is enabled
 but no token is supplied, the collector records a failed `raw.collection_runs` audit row
 with the error details and no payload.
 
@@ -73,17 +83,18 @@ Run the console application from the repository root:
 dotnet run --project src/HorseRacing.Bha.RawCollector
 ```
 
-To collect the racecourses API payload, provide the API bearer token outside source
-control. PowerShell environment-variable configuration uses double underscores for nested
-settings:
+To collect the API payloads, provide bearer tokens outside source control. PowerShell
+environment-variable configuration uses double underscores for nested settings:
 
 ```powershell
 $env:BhaCollection__RacecoursesApi__BearerToken = "..."
+$env:BhaCollection__FixturesApi__BearerToken = "..."
 dotnet run --project src/HorseRacing.Bha.RawCollector
 ```
 
-Without that token, the page source can still be collected, but the process returns a
-failure exit code because the enabled API source failed and was audited.
+Without those tokens, the public page, calendar and fixture-list sources can still be
+collected, but the process returns a failure exit code because the enabled API sources
+failed and were audited.
 
 Configuration comes from `appsettings.json`, environment variables, or command-line
 configuration. Keep environment-specific connection strings out of source control. For
@@ -94,9 +105,9 @@ $env:ConnectionStrings__HorseRacing = "Host=localhost;Port=5432;Database=horse_r
 dotnet run --project src/HorseRacing.Bha.RawCollector
 ```
 
-The source URL validation is intentionally not configurable beyond the two reviewed
-racecourse sources. Adding another BHA source requires a fresh source-policy review,
-documentation, fixtures and tests rather than weakening this allow-list.
+The source URL validation is intentionally not configurable beyond the reviewed
+racecourse and fixture sources. Adding another BHA source requires a fresh source-policy
+review, documentation, fixtures and tests rather than weakening this allow-list.
 
 ## Inspecting a run
 

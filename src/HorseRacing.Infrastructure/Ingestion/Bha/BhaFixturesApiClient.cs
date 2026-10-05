@@ -4,14 +4,14 @@ using Microsoft.Extensions.Options;
 
 namespace HorseRacing.Infrastructure.Ingestion.Bha;
 
-public sealed class BhaRacecoursesApiClient(
+public sealed class BhaFixturesApiClient(
     HttpClient httpClient,
     IOptions<BhaCollectionOptions> options) : IRawSourceClient
 {
-    private static readonly Uri RacecoursesPageUri =
-        new("https://www.britishhorseracing.com/racing/racecourses/");
+    private static readonly Uri FixturesPageUri =
+        new("https://www.britishhorseracing.com/racing/fixtures/full-year/");
 
-    private readonly BhaRawSourceOptions _sourceOptions = options.Value.RacecoursesApi;
+    private readonly BhaRawSourceOptions _sourceOptions = options.Value.FixturesApi;
 
     public async Task<RawSourceResponse> GetAsync(
         Uri sourceUri,
@@ -23,14 +23,14 @@ public sealed class BhaRacecoursesApiClient(
         if (string.IsNullOrWhiteSpace(bearerToken))
         {
             throw new InvalidOperationException(
-                "The BHA racecourses API source requires an operator-supplied bearer token. " +
-                "Configure BhaCollection:RacecoursesApi:BearerToken outside source control.");
+                "The BHA fixtures API source requires an operator-supplied bearer token. " +
+                "Configure BhaCollection:FixturesApi:BearerToken outside source control.");
         }
 
         using var request = new HttpRequestMessage(HttpMethod.Get, sourceUri);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
-        request.Headers.Referrer = RacecoursesPageUri;
+        request.Headers.Referrer = FixturesPageUri;
         request.Headers.Add("Origin", "https://www.britishhorseracing.com");
 
         using var response = await httpClient.SendAsync(
@@ -45,14 +45,14 @@ public sealed class BhaRacecoursesApiClient(
         if (declaredLength > _sourceOptions.MaximumResponseBytes)
         {
             throw new InvalidOperationException(
-                $"The BHA racecourses API response declared {declaredLength} bytes, " +
+                $"The BHA fixtures API response declared {declaredLength} bytes, " +
                 $"exceeding the configured limit of {_sourceOptions.MaximumResponseBytes} bytes.");
         }
 
         var content = await BoundedHttpContentReader.ReadAsync(
             response.Content,
             _sourceOptions.MaximumResponseBytes,
-            "BHA racecourses API",
+            "BHA fixtures API",
             cancellationToken);
 
         return new RawSourceResponse(
@@ -78,14 +78,17 @@ public sealed class BhaRacecoursesApiClient(
                 StringComparison.OrdinalIgnoreCase)
             || !string.Equals(
                 sourceUri.AbsolutePath.TrimEnd('/'),
-                "/bha/v1/racecourses",
+                "/bha/v1/fixtures",
                 StringComparison.OrdinalIgnoreCase)
-            || !string.IsNullOrEmpty(sourceUri.Query)
+            || !string.Equals(
+                sourceUri.Query,
+                "?per_page=250",
+                StringComparison.OrdinalIgnoreCase)
             || !string.IsNullOrEmpty(sourceUri.Fragment)
             || !string.IsNullOrEmpty(sourceUri.UserInfo))
         {
             throw new InvalidOperationException(
-                "This collector is restricted to the reviewed BHA racecourses API source.");
+                "This collector is restricted to the reviewed BHA fixtures API source.");
         }
     }
 }
