@@ -4,20 +4,20 @@ Reviewed: 5 October 2026.
 
 `HorseRacing.Bha.RawCollector` is a manually run .NET console application. Its only
 responsibility is to request the reviewed BHA racecourse, fixture, racecard, racehorse,
-result and racing-status raw sources and persist each received source response and
+jockey, result and racing-status raw sources and persist each received source response and
 collection result in the PostgreSQL `raw` schema.
 
-It does **not** parse racecourses, meetings, races, runners, horses, results or steward
-reports, create application records, or write to domain tables. Raw-to-Curated conversion
-is a separate process boundary: a future converter will read immutable `raw.payloads` rows
-and write validated, consistently shaped records to a separate Created/Curated schema. It
-must record its own attempt history and Raw lineage, and must never update a Raw payload
-in place.
+It does **not** parse racecourses, meetings, races, runners, horses, jockeys, results or
+steward reports, create application records, or write to domain tables. Raw-to-Curated
+conversion is a separate process boundary: a future converter will read immutable
+`raw.payloads` rows and write validated, consistently shaped records to a separate
+Created/Curated schema. It must record its own attempt history and Raw lineage, and must
+never update a Raw payload in place.
 
 ## Source and collection policy
 
 The collector is deliberately restricted in code to the reviewed racecourse, fixture,
-racecard, racehorse, result and racing-status sources:
+racecard, racehorse, jockey, result and racing-status sources:
 
 ```text
 https://www.britishhorseracing.com/racing/racecourses/
@@ -26,6 +26,8 @@ https://www.britishhorseracing.com/racing/fixtures/full-year/
 https://www.britishhorseracing.com/racing/fixtures/upcoming/
 https://www.britishhorseracing.com/racing/fixtures/upcoming/racecard/race/
 https://www.britishhorseracing.com/racing/horses/racehorse-search-results/
+https://www.britishhorseracing.com/racing/participants/jockeys/
+https://www.britishhorseracing.com/racing/jockeys-winners-totals/
 https://www.britishhorseracing.com/racing/results/
 https://www.britishhorseracing.com/racing/stewards-reports/
 https://www.britishhorseracing.com/racing/racing-updates/
@@ -59,18 +61,28 @@ reviewed path and query shape:
 https://api09.horseracing.software/bha/v1/racehorses?q={at-least-3-characters}[&page={positive-number}][&per_page={1-to-100}][&rated={0-or-1}]
 ```
 
+Configured jockey API sources may also be collected when their URLs match one of these
+reviewed path shapes:
+
+```text
+https://api09.horseracing.software/bha/v1/championships/jockeys[?type={flat-or-jump}][&page={positive-number}][&per_page={1-to-100}][&sort={field:asc-or-desc}]
+https://api09.horseracing.software/bha/v1/jockeys[?name={at-least-2-characters}][&page={positive-number}][&per_page={1-to-100}]
+https://api09.horseracing.software/bha/v1/jockeys/{jockeyId}
+https://api09.horseracing.software/bha/v1/jockeys/milestones[?sortby={entryName|totalWins|totalRun|racingToday}:{asc-or-desc}]
+```
+
 The BHA website pages are publicly readable. Its current `robots.txt` does not disallow
 these public page paths and specifies `crawl-delay: 10`; the configured minimum interval
 for every enabled source therefore cannot be less than ten seconds. Each process performs
 one request per enabled source and has no concurrent fetches or automatic retries. The
 default timeout is 30 seconds. The default response limits are 5 MB for website pages and
 calendar feeds, 10 MB for the racecourses API, and 20 MB for the fixtures API and fixture
-list downloads, racecard API sources, racehorse API sources, result fixture API and
-stewards reports API. The `/feeds/` endpoints seen on some BHA pages are not collected
-because current `robots.txt` disallows that path family.
+list downloads, racecard API sources, racehorse API sources, jockey API sources, result
+fixture API and stewards reports API. The `/feeds/` endpoints seen on some BHA pages are
+not collected because current `robots.txt` disallows that path family.
 
-The racecourses, fixtures, racecard, racehorse, result fixture and stewards reports API
-sources are the JSON endpoints used by the current BHA Angular pages. They require
+The racecourses, fixtures, racecard, racehorse, jockey, result fixture and stewards
+reports API sources are the JSON endpoints used by the current BHA Angular pages. They require
 operator-supplied bearer tokens. The repository must not contain those tokens or copied
 tokens from public website JavaScript. Configure
 `BhaCollection:RacecoursesApi:BearerToken` and
@@ -78,6 +90,7 @@ tokens from public website JavaScript. Configure
 another local configuration source outside version control. Configure
 `BhaCollection:RacecardApiBearerToken` for any configured racecard API source,
 `BhaCollection:RacehorseApiBearerToken` for any configured racehorse API source and
+`BhaCollection:JockeyApiBearerToken` for the configured jockey API sources and
 `BhaCollection:RacingStatusApiBearerToken` for the result fixture and stewards reports
 API sources. If an API source is enabled but no token is supplied, the collector records a
 failed `raw.collection_runs` audit row with the error details and no payload.
@@ -128,6 +141,7 @@ $env:BhaCollection__RacecoursesApi__BearerToken = "..."
 $env:BhaCollection__FixturesApi__BearerToken = "..."
 $env:BhaCollection__RacecardApiBearerToken = "..."
 $env:BhaCollection__RacehorseApiBearerToken = "..."
+$env:BhaCollection__JockeyApiBearerToken = "..."
 $env:BhaCollection__RacingStatusApiBearerToken = "..."
 dotnet run --project src/HorseRacing.Bha.RawCollector
 ```
@@ -146,9 +160,9 @@ dotnet run --project src/HorseRacing.Bha.RawCollector
 ```
 
 The source URL validation is intentionally not configurable beyond the reviewed
-racecourse, fixture, racecard, racehorse, result and racing-status sources. Adding another
-BHA source requires a fresh source-policy review, documentation, fixtures and tests rather
-than weakening this allow-list.
+racecourse, fixture, racecard, racehorse, jockey, result and racing-status sources. Adding
+another BHA source requires a fresh source-policy review, documentation, fixtures and
+tests rather than weakening this allow-list.
 
 ## Inspecting a run
 
