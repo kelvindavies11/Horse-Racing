@@ -4,10 +4,10 @@ public sealed class BhaCollectionOptions
 {
     public const string SectionName = "BhaCollection";
 
-    public string CollectorVersion { get; init; } = "1.3.0";
+    public string CollectorVersion { get; init; } = "1.4.0";
 
     public string UserAgent { get; init; } =
-        "HorseRacingLocalCollector/1.3 (+https://github.com/kelvindavies11/Horse-Racing)";
+        "HorseRacingLocalCollector/1.4 (+https://github.com/kelvindavies11/Horse-Racing)";
 
     public int RequestTimeoutSeconds { get; init; } = 30;
 
@@ -108,6 +108,56 @@ public sealed class BhaCollectionOptions
     public string? RacecardApiBearerToken { get; init; }
 
     public List<BhaRawSourceOptions> RacecardApiSources { get; init; } = [];
+
+    public List<BhaRawSourceOptions> RacingStatusPageSources { get; init; } =
+    [
+        new()
+        {
+            JobName = "bha-results-page",
+            SourceName = "BHA results page",
+            SourceUrl = "https://www.britishhorseracing.com/racing/results/",
+            MinimumRequestIntervalSeconds = 10,
+            MaximumResponseBytes = 5_000_000
+        },
+        new()
+        {
+            JobName = "bha-stewards-reports-page",
+            SourceName = "BHA stewards reports page",
+            SourceUrl = "https://www.britishhorseracing.com/racing/stewards-reports/",
+            MinimumRequestIntervalSeconds = 10,
+            MaximumResponseBytes = 5_000_000
+        },
+        new()
+        {
+            JobName = "bha-racing-updates-page",
+            SourceName = "BHA racing updates page",
+            SourceUrl = "https://www.britishhorseracing.com/racing/racing-updates/",
+            MinimumRequestIntervalSeconds = 10,
+            MaximumResponseBytes = 5_000_000
+        }
+    ];
+
+    public string? RacingStatusApiBearerToken { get; init; }
+
+    public List<BhaRawSourceOptions> RacingStatusApiSources { get; init; } =
+    [
+        new()
+        {
+            JobName = "bha-results-api",
+            SourceName = "BHA results API",
+            SourceUrl = "https://api09.horseracing.software/bha/v1/fixtures/?resultsAvailable=1&fields=courseId,courseName,fixtureDate,fixtureType,fixtureSession,abandonedReasonCode,highlightTitle",
+            MinimumRequestIntervalSeconds = 10,
+            MaximumResponseBytes = 20_000_000
+        },
+        new()
+        {
+            JobName = "bha-stewards-reports-api",
+            SourceName = "BHA stewards reports API",
+            SourceUrl = "https://api09.horseracing.software/bha/v1/stewards-room/reports",
+            MinimumRequestIntervalSeconds = 10,
+            MaximumResponseBytes = 20_000_000
+        }
+    ];
 }
 
 public sealed class BhaRawSourceOptions
