@@ -4,10 +4,10 @@ public sealed class BhaCollectionOptions
 {
     public const string SectionName = "BhaCollection";
 
-    public string CollectorVersion { get; init; } = "1.2.0";
+    public string CollectorVersion { get; init; } = "1.3.0";
 
     public string UserAgent { get; init; } =
-        "HorseRacingLocalCollector/1.2 (+https://github.com/kelvindavies11/Horse-Racing)";
+        "HorseRacingLocalCollector/1.3 (+https://github.com/kelvindavies11/Horse-Racing)";
 
     public int RequestTimeoutSeconds { get; init; } = 30;
 
@@ -86,6 +86,28 @@ public sealed class BhaCollectionOptions
             MaximumResponseBytes = 20_000_000
         }
     ];
+
+    public BhaRawSourceOptions UpcomingFixturesPage { get; init; } = new()
+    {
+        JobName = "bha-upcoming-fixtures-page",
+        SourceName = "BHA upcoming fixtures page",
+        SourceUrl = "https://www.britishhorseracing.com/racing/fixtures/upcoming/",
+        MinimumRequestIntervalSeconds = 10,
+        MaximumResponseBytes = 5_000_000
+    };
+
+    public BhaRawSourceOptions RacecardPage { get; init; } = new()
+    {
+        JobName = "bha-racecard-page",
+        SourceName = "BHA racecard page shell",
+        SourceUrl = "https://www.britishhorseracing.com/racing/fixtures/upcoming/racecard/race/",
+        MinimumRequestIntervalSeconds = 10,
+        MaximumResponseBytes = 5_000_000
+    };
+
+    public string? RacecardApiBearerToken { get; init; }
+
+    public List<BhaRawSourceOptions> RacecardApiSources { get; init; } = [];
 }
 
 public sealed class BhaRawSourceOptions

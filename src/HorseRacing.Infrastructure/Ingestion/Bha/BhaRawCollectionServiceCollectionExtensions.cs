@@ -75,6 +75,33 @@ public static class BhaRawCollectionServiceCollectionExtensions
                 UseCookies = false
             });
 
+        services
+            .AddHttpClient<BhaUpcomingFixturesPageClient>(ConfigureHttpClient)
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                AllowAutoRedirect = true,
+                MaxAutomaticRedirections = 3,
+                UseCookies = false
+            });
+
+        services
+            .AddHttpClient<BhaRacecardPageClient>(ConfigureHttpClient)
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                AllowAutoRedirect = true,
+                MaxAutomaticRedirections = 3,
+                UseCookies = false
+            });
+
+        services
+            .AddHttpClient<BhaRacecardApiClient>(ConfigureHttpClient)
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                AllowAutoRedirect = true,
+                MaxAutomaticRedirections = 3,
+                UseCookies = false
+            });
+
         return services;
     }
 
@@ -110,7 +137,14 @@ public static class BhaRawCollectionServiceCollectionExtensions
                 BhaFixtureCalendarClient.ValidateSourceUri)
             && ValidateSourceOptions(
                 options.FixtureListDownloadSources,
-                BhaFixtureListDownloadClient.ValidateSourceUri);
+                BhaFixtureListDownloadClient.ValidateSourceUri)
+            && ValidateSourceOptions(
+                options.UpcomingFixturesPage,
+                BhaUpcomingFixturesPageClient.ValidateSourceUri)
+            && ValidateSourceOptions(options.RacecardPage, BhaRacecardPageClient.ValidateSourceUri)
+            && ValidateSourceOptions(
+                options.RacecardApiSources,
+                BhaRacecardApiClient.ValidateSourceUri);
     }
 
     private static bool ValidateSourceOptions(

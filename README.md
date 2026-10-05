@@ -87,9 +87,10 @@ Run the local BHA racecourse raw collection job after applying migrations:
 dotnet run --project src/HorseRacing.Bha.RawCollector
 ```
 
-The job stores exact BHA racecourse and fixture source responses, including the reviewed
-API payloads when local bearer tokens are configured, and source-to-Raw audit rows in the
-dedicated PostgreSQL `raw` schema. It does not convert or promote data. See the
+The job stores exact BHA racecourse, fixture and racecard source responses, including the
+reviewed API payloads when local bearer tokens and racecard API source URLs are
+configured, and source-to-Raw audit rows in the dedicated PostgreSQL `raw` schema. It
+does not convert or promote data. See the
 [BHA Raw collector guide](docs/BHA-RAW-COLLECTOR.md) for policy, token configuration,
 schema, and inspection details.
 
@@ -105,7 +106,7 @@ The website defaults to representative fixture data while the Created-layer read
 
 ## Current status
 
-The implementation is **IN PROGRESS**. The domain now covers racecourses, meetings, races, horses, stables, trainers, owners, jockeys, runners and race/runner results, with EF mappings, migration and PostgreSQL SQL. A React website foundation is present with a typed API boundary and representative fallback data. The manual BHA raw collector, immutable Raw payload storage, and source-to-Raw audit are implemented for the reviewed racecourse and fixture/meeting sources. Raw-to-Created conversion, entity parsing, additional entity/scheduled collection jobs, the Created layer, domain-projection job, live read endpoints, and future prediction views remain planned. See [Project status](docs/PROJECT-STATUS.md) for actual verification evidence and remaining gaps.
+The implementation is **IN PROGRESS**. The domain now covers racecourses, meetings, races, horses, stables, trainers, owners, jockeys, runners and race/runner results, with EF mappings, migration and PostgreSQL SQL. A React website foundation is present with a typed API boundary and representative fallback data. The manual BHA raw collector, immutable Raw payload storage, and source-to-Raw audit are implemented for the reviewed racecourse, fixture/meeting and racecard/race source families. Raw-to-Created conversion, entity parsing, additional entity/scheduled collection jobs, the Created layer, domain-projection job, live read endpoints, and future prediction views remain planned. See [Project status](docs/PROJECT-STATUS.md) for actual verification evidence and remaining gaps.
 
 The [domain dictionary](docs/DOMAIN-MODEL.md) explains entities and relationships; the [data dictionary](docs/DATA-DICTIONARY.md) records physical columns and constraints. External references are in [source links](docs/SOURCE-LINKS.md), and planned delivery is in the [feature backlog](docs/FEATURES.md).
 
