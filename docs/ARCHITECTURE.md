@@ -52,9 +52,10 @@ British Horseracing Authority website
 - Preserve enough provenance to trace every created record back to its raw input and BHA source.
 
 The first implemented job is the manually run `HorseRacing.Bha.RawCollector` .NET console
-application. It is restricted to one reviewed public BHA racecourses page and writes only
-to the PostgreSQL `raw` schema. It captures source responses; it does not parse or promote
-racecourse records.
+application. It is restricted to the reviewed BHA racecourses page and racecourses API
+sources and writes only to the PostgreSQL `raw` schema. It captures source responses; it
+does not parse or promote racecourse records. The API source requires an operator-supplied
+bearer token outside source control.
 
 ### Raw data layer
 
@@ -163,4 +164,4 @@ Source-code dependencies must point inwards. Domain must not reference Applicati
 
 ## Current scope
 
-This remains a scaffold. The expanded domain and its PostgreSQL relationships are implemented; [the data dictionary](DATA-DICTIONARY.md) and [generated SQL](sql/DOMAIN-SCHEMA.sql) describe that implementation. The React website foundation is implemented against representative data behind a typed repository. The first manual BHA page collector, immutable Raw payload table, and source-to-Raw audit table are implemented. Source parsing, Raw-to-Created processing, Created storage and promotion audit/lineage remain planned, as do additional/scheduled collectors, domain-projection, live website data, and prediction views. Result ingestion, revision history, authentication, operational observability and deployment remain future work. [Project status](PROJECT-STATUS.md) records executed verification gates. Consult [source links](SOURCE-LINKS.md) for research provenance.
+This remains a scaffold. The expanded domain and its PostgreSQL relationships are implemented; [the data dictionary](DATA-DICTIONARY.md) and [generated SQL](sql/DOMAIN-SCHEMA.sql) describe that implementation. The React website foundation is implemented against representative data behind a typed repository. The manual BHA racecourse raw collector, immutable Raw payload table, and source-to-Raw audit table are implemented for the reviewed racecourses page and racecourses API sources. Source parsing, Raw-to-Created processing, Created storage and promotion audit/lineage remain planned, as do additional entity/scheduled collectors, domain-projection, live website data, and prediction views. Result ingestion, revision history, authentication, operational observability and deployment remain future work. [Project status](PROJECT-STATUS.md) records executed verification gates. Consult [source links](SOURCE-LINKS.md) for research provenance.

@@ -20,18 +20,18 @@ public static class BhaRawCollectionServiceCollectionExtensions
 
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<IRawIngestionRepository, RawIngestionRepository>();
-        services.AddScoped<CollectRawSourceHandler>();
 
         services
-            .AddHttpClient<IRawSourceClient, BhaPageClient>((serviceProvider, client) =>
+            .AddHttpClient<BhaPageClient>(ConfigureHttpClient)
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
             {
-                var configured = serviceProvider
-                    .GetRequiredService<IOptions<BhaCollectionOptions>>()
-                    .Value;
+                AllowAutoRedirect = true,
+                MaxAutomaticRedirections = 3,
+                UseCookies = false
+            });
 
-                client.Timeout = TimeSpan.FromSeconds(configured.RequestTimeoutSeconds);
-                client.DefaultRequestHeaders.UserAgent.ParseAdd(configured.UserAgent);
-            })
+        services
+            .AddHttpClient<BhaRacecoursesApiClient>(ConfigureHttpClient)
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
             {
                 AllowAutoRedirect = true,
@@ -42,23 +42,54 @@ public static class BhaRawCollectionServiceCollectionExtensions
         return services;
     }
 
+    private static void ConfigureHttpClient(
+        IServiceProvider serviceProvider,
+        HttpClient client)
+    {
+        var configured = serviceProvider
+            .GetRequiredService<IOptions<BhaCollectionOptions>>()
+            .Value;
+
+        client.Timeout = TimeSpan.FromSeconds(configured.RequestTimeoutSeconds);
+        client.DefaultRequestHeaders.UserAgent.ParseAdd(configured.UserAgent);
+    }
+
     private static bool ValidateOptions(BhaCollectionOptions options)
     {
-        if (string.IsNullOrWhiteSpace(options.JobName)
-            || string.IsNullOrWhiteSpace(options.SourceName)
-            || string.IsNullOrWhiteSpace(options.CollectorVersion)
+        if (string.IsNullOrWhiteSpace(options.CollectorVersion)
             || string.IsNullOrWhiteSpace(options.UserAgent)
-            || options.RequestTimeoutSeconds is < 1 or > 120
-            || options.MinimumRequestIntervalSeconds < 10
-            || options.MaximumResponseBytes is < 1 or > 20_000_000
-            || !Uri.TryCreate(options.SourceUrl, UriKind.Absolute, out var sourceUri))
+            || options.RequestTimeoutSeconds is < 1 or > 120)
+        {
+            return false;
+        }
+
+        return ValidateSourceOptions(options.RacecoursesPage, BhaPageClient.ValidateSourceUri)
+            && ValidateSourceOptions(
+                options.RacecoursesApi,
+                BhaRacecoursesApiClient.ValidateSourceUri);
+    }
+
+    private static bool ValidateSourceOptions(
+        BhaRawSourceOptions sourceOptions,
+        Action<Uri> validateUri)
+    {
+        if (!sourceOptions.Enabled)
+        {
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(sourceOptions.JobName)
+            || string.IsNullOrWhiteSpace(sourceOptions.SourceName)
+            || sourceOptions.MinimumRequestIntervalSeconds < 10
+            || sourceOptions.MaximumResponseBytes is < 1 or > 20_000_000
+            || !Uri.TryCreate(sourceOptions.SourceUrl, UriKind.Absolute, out var sourceUri))
         {
             return false;
         }
 
         try
         {
-            BhaPageClient.ValidateSourceUri(sourceUri);
+            validateUri(sourceUri);
             return true;
         }
         catch (InvalidOperationException)

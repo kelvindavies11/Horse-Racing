@@ -20,7 +20,8 @@ var logger = scope.ServiceProvider
 var options = scope.ServiceProvider
     .GetRequiredService<IOptions<BhaCollectionOptions>>()
     .Value;
-var handler = scope.ServiceProvider.GetRequiredService<CollectRawSourceHandler>();
+var repository = scope.ServiceProvider.GetRequiredService<IRawIngestionRepository>();
+var timeProvider = scope.ServiceProvider.GetRequiredService<TimeProvider>();
 
 using var shutdown = new CancellationTokenSource();
 Console.CancelKeyPress += (_, eventArgs) =>
@@ -30,41 +31,80 @@ Console.CancelKeyPress += (_, eventArgs) =>
 };
 
 logger.LogInformation(
-    "Starting {JobName}. This collector is restricted to local, non-commercial use " +
-    "of the public BHA racecourses page.",
-    options.JobName);
+    "Starting BHA raw collection. This collector is restricted to local, non-commercial use " +
+    "of reviewed BHA racecourse sources.");
 
-RawCollectionResult result;
-try
+var sources = new List<RawSourceToCollect>();
+
+if (options.RacecoursesPage.Enabled)
 {
-    result = await handler.HandleAsync(
-        new CollectRawSourceCommand(
-            options.JobName,
-            options.SourceName,
-            new Uri(options.SourceUrl),
-            options.CollectorVersion,
-            TimeSpan.FromSeconds(options.MinimumRequestIntervalSeconds)),
-        shutdown.Token);
-}
-catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
-{
-    logger.LogWarning("Collection was cancelled; the audit result was retained.");
-    return 2;
+    sources.Add(new RawSourceToCollect(
+        options.RacecoursesPage,
+        scope.ServiceProvider.GetRequiredService<BhaPageClient>()));
 }
 
-if (result.Outcome == RawCollectionOutcome.Succeeded)
+if (options.RacecoursesApi.Enabled)
 {
-    logger.LogInformation(
-        "Collection run {RunId} stored Raw payload {PayloadId} (HTTP {StatusCode}).",
+    sources.Add(new RawSourceToCollect(
+        options.RacecoursesApi,
+        scope.ServiceProvider.GetRequiredService<BhaRacecoursesApiClient>()));
+}
+
+if (sources.Count == 0)
+{
+    logger.LogError("No BHA raw sources are enabled.");
+    return 1;
+}
+
+var hasFailure = false;
+
+foreach (var source in sources)
+{
+    logger.LogInformation("Collecting {JobName} from {SourceUrl}.", source.Options.JobName, source.Options.SourceUrl);
+
+    var handler = new CollectRawSourceHandler(source.Client, repository, timeProvider);
+    RawCollectionResult result;
+
+    try
+    {
+        result = await handler.HandleAsync(
+            new CollectRawSourceCommand(
+                source.Options.JobName,
+                source.Options.SourceName,
+                new Uri(source.Options.SourceUrl),
+                options.CollectorVersion,
+                TimeSpan.FromSeconds(source.Options.MinimumRequestIntervalSeconds)),
+            shutdown.Token);
+    }
+    catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
+    {
+        logger.LogWarning("Collection was cancelled; the audit result was retained.");
+        return 2;
+    }
+
+    if (result.Outcome == RawCollectionOutcome.Succeeded)
+    {
+        logger.LogInformation(
+            "Collection run {RunId} stored Raw payload {PayloadId} for {JobName} (HTTP {StatusCode}).",
+            result.RunId,
+            result.PayloadId,
+            source.Options.JobName,
+            result.HttpStatusCode);
+
+        continue;
+    }
+
+    hasFailure = true;
+    logger.LogError(
+        "Collection run {RunId} for {JobName} failed with {ErrorCode}: {ErrorMessage}",
         result.RunId,
-        result.PayloadId,
-        result.HttpStatusCode);
-    return 0;
+        source.Options.JobName,
+        result.ErrorCode,
+        result.ErrorMessage);
 }
 
-logger.LogError(
-    "Collection run {RunId} failed with {ErrorCode}: {ErrorMessage}",
-    result.RunId,
-    result.ErrorCode,
-    result.ErrorMessage);
-return 1;
+return hasFailure ? 1 : 0;
+
+internal sealed record RawSourceToCollect(
+    BhaRawSourceOptions Options,
+    IRawSourceClient Client);

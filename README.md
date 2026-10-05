@@ -39,6 +39,8 @@ src/
   HorseRacing.Web/             React website and typed data-access layer
 tests/
   HorseRacing.Domain.UnitTests/
+  HorseRacing.Application.UnitTests/
+  HorseRacing.Infrastructure.UnitTests/
 docs/
   ARCHITECTURE.md
   DATABASE.md
@@ -79,16 +81,17 @@ dotnet run --project src/HorseRacing.Api
 
 The local API defaults to `http://localhost:5080`. Its basic health endpoint is `GET /health`.
 
-Run the first local BHA collection job after applying migrations:
+Run the local BHA racecourse raw collection job after applying migrations:
 
 ```powershell
 dotnet run --project src/HorseRacing.Bha.RawCollector
 ```
 
-The job stores the exact BHA racecourses-page response and source-to-Raw audit in the
+The job stores the exact BHA racecourses page response, the reviewed racecourses API
+response when a local bearer token is configured, and source-to-Raw audit rows in the
 dedicated PostgreSQL `raw` schema. It does not convert or promote data. See the
-[BHA Raw collector guide](docs/BHA-RAW-COLLECTOR.md) for policy, configuration, schema,
-and inspection details.
+[BHA Raw collector guide](docs/BHA-RAW-COLLECTOR.md) for policy, token configuration,
+schema, and inspection details.
 
 Start the website in a second terminal:
 
@@ -102,7 +105,7 @@ The website defaults to representative fixture data while the Created-layer read
 
 ## Current status
 
-The implementation is **IN PROGRESS**. The domain now covers racecourses, meetings, races, horses, stables, trainers, owners, jockeys, runners and race/runner results, with EF mappings, migration and PostgreSQL SQL. A React website foundation is present with a typed API boundary and representative fallback data. The first manual BHA racecourses-page collector, immutable Raw payload storage, and source-to-Raw audit are implemented. Raw-to-Created conversion, entity parsing, additional collection jobs, the Created layer, domain-projection job, live read endpoints, and future prediction views remain planned. See [Project status](docs/PROJECT-STATUS.md) for actual verification evidence and remaining gaps.
+The implementation is **IN PROGRESS**. The domain now covers racecourses, meetings, races, horses, stables, trainers, owners, jockeys, runners and race/runner results, with EF mappings, migration and PostgreSQL SQL. A React website foundation is present with a typed API boundary and representative fallback data. The manual BHA racecourse raw collector, immutable Raw payload storage, and source-to-Raw audit are implemented for the reviewed racecourse page and racecourses API sources. Raw-to-Created conversion, entity parsing, additional entity/scheduled collection jobs, the Created layer, domain-projection job, live read endpoints, and future prediction views remain planned. See [Project status](docs/PROJECT-STATUS.md) for actual verification evidence and remaining gaps.
 
 The [domain dictionary](docs/DOMAIN-MODEL.md) explains entities and relationships; the [data dictionary](docs/DATA-DICTIONARY.md) records physical columns and constraints. External references are in [source links](docs/SOURCE-LINKS.md), and planned delivery is in the [feature backlog](docs/FEATURES.md).
 

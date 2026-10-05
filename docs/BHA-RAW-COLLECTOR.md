@@ -3,8 +3,8 @@
 Reviewed: 5 October 2026.
 
 `HorseRacing.Bha.RawCollector` is a manually run .NET console application. Its only
-responsibility is to request the public BHA racecourses page and persist the received
-source response and collection result in the PostgreSQL `raw` schema.
+responsibility is to request the reviewed BHA racecourse raw sources and persist each
+received source response and collection result in the PostgreSQL `raw` schema.
 
 It does **not** parse racecourses, create application records, or write to domain tables.
 Raw-to-Curated conversion is a separate process boundary: a future converter will read
@@ -14,22 +14,33 @@ and must never update a Raw payload in place.
 
 ## Source and collection policy
 
-The collector is deliberately restricted in code to:
+The collector is deliberately restricted in code to the reviewed racecourse sources:
 
 ```text
 https://www.britishhorseracing.com/racing/racecourses/
+https://api09.horseracing.software/bha/v1/racecourses/
 ```
 
 The BHA page is publicly readable. Its current `robots.txt` allows this path and specifies
-`crawl-delay: 10`; the configured minimum interval therefore cannot be less than ten
-seconds. Each process performs one request and has no concurrent fetches or automatic
-retries. The default timeout is 30 seconds and the default response limit is 5 MB.
+`crawl-delay: 10`; the configured minimum interval for every enabled source therefore
+cannot be less than ten seconds. Each process performs one request per enabled source and
+has no concurrent fetches or automatic retries. The default timeout is 30 seconds. The
+default response limits are 5 MB for the HTML page and 10 MB for the racecourses API.
+
+The racecourses API source is the JSON endpoint used by the current BHA racecourses page.
+It requires an operator-supplied bearer token. The repository must not contain that token
+or a copied token from public website JavaScript. Configure
+`BhaCollection:RacecoursesApi:BearerToken` through an environment variable, user secret or
+another local configuration source outside version control. If the API source is enabled
+but no token is supplied, the collector records a failed `raw.collection_runs` audit row
+with the error details and no payload.
 
 The BHA terms permit personal-use extracts and prohibit automated extraction for
 commercial purposes. This local collector is labelled and configured for non-commercial
 use only. Do not run it for commercial or business use without an appropriate BHA licence
-or written permission. It uses a descriptive user agent and no bearer token, credential,
-browser cookie, access-control bypass, or hidden API.
+or written permission. It uses a descriptive user agent, no browser cookies and no access
+control bypass. API credentials are an explicit local operator concern and are never
+committed.
 
 ## Raw persistence
 
@@ -62,6 +73,18 @@ Run the console application from the repository root:
 dotnet run --project src/HorseRacing.Bha.RawCollector
 ```
 
+To collect the racecourses API payload, provide the API bearer token outside source
+control. PowerShell environment-variable configuration uses double underscores for nested
+settings:
+
+```powershell
+$env:BhaCollection__RacecoursesApi__BearerToken = "..."
+dotnet run --project src/HorseRacing.Bha.RawCollector
+```
+
+Without that token, the page source can still be collected, but the process returns a
+failure exit code because the enabled API source failed and was audited.
+
 Configuration comes from `appsettings.json`, environment variables, or command-line
 configuration. Keep environment-specific connection strings out of source control. For
 example:
@@ -71,9 +94,9 @@ $env:ConnectionStrings__HorseRacing = "Host=localhost;Port=5432;Database=horse_r
 dotnet run --project src/HorseRacing.Bha.RawCollector
 ```
 
-The source URL validation is intentionally not configurable beyond the reviewed page.
-Adding another BHA source requires a fresh source-policy review, documentation, fixtures,
-and tests rather than weakening this allow-list.
+The source URL validation is intentionally not configurable beyond the two reviewed
+racecourse sources. Adding another BHA source requires a fresh source-policy review,
+documentation, fixtures and tests rather than weakening this allow-list.
 
 ## Inspecting a run
 

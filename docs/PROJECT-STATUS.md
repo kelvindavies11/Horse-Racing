@@ -15,15 +15,15 @@ Overall status: **IN PROGRESS**
 - [x] ASP.NET Core API composition root and initial endpoint
 - [x] React and TypeScript website foundation with typed data access, responsive race-day dashboard, representative fallback data and UI tests
 - [x] Local PostgreSQL container definition
-- [x] Manual .NET BHA racecourses-page collector with bounded public-page access
+- [x] Manual .NET BHA racecourse raw collector with bounded page/API source access and external API bearer-token configuration
 - [x] Dedicated PostgreSQL Raw payload and source-to-Raw audit tables with migration
 - [x] Architecture, database, workflow, domain/data dictionaries, relationship diagram and source-links register
 - [x] Domain unit tests and transactional SQL integrity checks
 
 ## Planned target architecture
 
-- [ ] Additional and scheduled jobs to scrape reviewed British Horseracing Authority sources
-- [ ] Raw extractor records beyond the implemented immutable page-payload foundation
+- [ ] Additional entity and scheduled jobs to scrape reviewed British Horseracing Authority sources beyond the racecourse raw slice
+- [ ] Raw extractor records beyond the implemented immutable racecourse source-payload foundation
 - [ ] Raw-to-created validation and mapping
 - [ ] Created data layer with source provenance, `FirstObserved`, and `LastObserved`
 - [ ] Audit trail for raw ingestion and raw-to-created promotion
@@ -37,11 +37,11 @@ Overall status: **IN PROGRESS**
 | Gate | Status | Evidence |
 | --- | --- | --- |
 | Dependency restore | **PASSED** | `dotnet restore`, .NET SDK 10.0.301, 5 October 2026 |
-| Solution build | **PASSED** | `dotnet build --no-restore`: zero warnings/errors, including `HorseRacing.Bha.RawCollector` |
-| Unit tests | **PASSED** | `dotnet test --no-build`: 21 passed, zero failed/skipped; Raw success, HTTP failure and request-failure audit paths included |
+| Solution build | **PASSED** | `dotnet build --no-restore`: zero warnings/errors, including `HorseRacing.Bha.RawCollector` and `HorseRacing.Infrastructure.UnitTests` |
+| Unit tests | **PASSED** | `dotnet test --no-build`: 27 passed, zero failed/skipped; Raw success, HTTP failure and request-failure audit paths plus racecourses API token/URL behavior included |
 | EF model/snapshot consistency | **PASSED** | `dotnet ef migrations has-pending-model-changes`: no changes |
 | Raw migration apply/rollback/reapply | **PASSED on PostgreSQL 16** | `AddRawIngestion` applied to isolated `raw_collector_verification`, rolled back to `ExpandRacingDomain`, verified both Raw tables absent, and reapplied |
-| Raw collector smoke test | **PASSED on PostgreSQL 16** | Console run received HTTP 200 and stored one 79,398-byte `text/html; UTF-8` payload with matching byte count, BHA source/effective URLs and SHA-256; audit outcome Succeeded with no error |
+| Raw collector smoke test | **PASSED on PostgreSQL 16 for page source** | Console run received HTTP 200 and stored one 79,398-byte `text/html; UTF-8` payload with matching byte count, BHA source/effective URLs and SHA-256; audit outcome Succeeded with no error. The API source now requires an operator-supplied token and has unit coverage but no token-backed smoke run in this table |
 | Migration apply | **PASSED on PostgreSQL 16** | InitialCreate and ExpandRacingDomain applied to isolated `domain_verification` on loopback port 55432 |
 | Generated SQL | **PASSED on PostgreSQL 16** | Regenerated through `AddRawIngestion`; applied to a fresh Raw gate database and reapplied twice to a migrated verification database |
 | SQL relationships/constraints | **PASSED on PostgreSQL 16** | `tests/sql/verify-domain.sql` rerun after `AddRawIngestion`: 12 rejection checks, valid dead heat, optional connections/licences and relationship traversal; test data rolled back |
@@ -59,6 +59,6 @@ The presence of source code, tests, or migrations does not imply that a gate pas
 
 The PostgreSQL 16 tests used a separate temporary cluster under ignored `artifacts/postgres-domain-verification`, with sample databases only. The Raw collector verification databases were removed after their migration, SQL and smoke checks; the existing local PostgreSQL service/data was not altered. PostgreSQL warned that it could not remove physical directories while dropping those disposable databases, so useless files may remain inside the ignored temporary cluster even though the databases were removed from the cluster catalogue. EF CLI 10.0.7 emitted an older-tools notice against the 10.0.12 runtime; migration generation, apply, rollback and model checks nevertheless completed successfully.
 
-The API is still a scaffold: reference/meeting creation endpoints, Created-layer read endpoints, full validation/error contracts, result ingestion and management endpoints are not implemented. The website therefore defaults to representative fixture data behind the same repository contract expected for the future read API. The Raw collector captures the public BHA racecourses page but does not parse or promote racecourse records; Raw-to-Created remains a separate future process. Existing databases with races/runners require a reviewed legacy data mapping; the expansion deliberately fails before DDL when these tables are populated.
+The API is still a scaffold: reference/meeting creation endpoints, Created-layer read endpoints, full validation/error contracts, result ingestion and management endpoints are not implemented. The website therefore defaults to representative fixture data behind the same repository contract expected for the future read API. The Raw collector captures the public BHA racecourses page and, when configured with an operator-supplied bearer token, the racecourses API payload; it does not parse or promote racecourse records. Raw-to-Created remains a separate future process. Existing databases with races/runners require a reviewed legacy data mapping; the expansion deliberately fails before DDL when these tables are populated.
 
-Pre-declaration entries, detailed race conditions, pedigree, temporal ownership/training, and official result revisions remain explicit gaps in the [domain dictionary](DOMAIN-MODEL.md). The [data dictionary](DATA-DICTIONARY.md) reflects implemented tables only. Raw/Created/audit storage, live React browsing and predictions remain planned in the [feature backlog](FEATURES.md). Research provenance is in [source links](SOURCE-LINKS.md).
+Pre-declaration entries, detailed race conditions, pedigree, temporal ownership/training, and official result revisions remain explicit gaps in the [domain dictionary](DOMAIN-MODEL.md). The [data dictionary](DATA-DICTIONARY.md) reflects implemented tables only. Created storage and promotion audit, live React browsing and predictions remain planned in the [feature backlog](FEATURES.md). Research provenance is in [source links](SOURCE-LINKS.md).
