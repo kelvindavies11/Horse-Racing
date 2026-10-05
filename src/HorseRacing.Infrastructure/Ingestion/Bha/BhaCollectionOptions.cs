@@ -4,10 +4,10 @@ public sealed class BhaCollectionOptions
 {
     public const string SectionName = "BhaCollection";
 
-    public string CollectorVersion { get; init; } = "1.6.0";
+    public string CollectorVersion { get; init; } = "1.7.0";
 
     public string UserAgent { get; init; } =
-        "HorseRacingLocalCollector/1.6 (+https://github.com/kelvindavies11/Horse-Racing)";
+        "HorseRacingLocalCollector/1.7 (+https://github.com/kelvindavies11/Horse-Racing)";
 
     public int RequestTimeoutSeconds { get; init; } = 30;
 
@@ -175,6 +175,80 @@ public sealed class BhaCollectionOptions
             JobName = "bha-jockeys-milestones-api",
             SourceName = "BHA jockeys milestones API",
             SourceUrl = "https://api09.horseracing.software/bha/v1/jockeys/milestones",
+            MinimumRequestIntervalSeconds = 10,
+            MaximumResponseBytes = 20_000_000
+        }
+    ];
+
+    public List<BhaRawSourceOptions> TrainerPageSources { get; init; } =
+    [
+        new()
+        {
+            JobName = "bha-trainers-page",
+            SourceName = "BHA trainers page",
+            SourceUrl = "https://www.britishhorseracing.com/racing/participants/trainers/",
+            MinimumRequestIntervalSeconds = 10,
+            MaximumResponseBytes = 5_000_000
+        },
+        new()
+        {
+            JobName = "bha-trainers-map-page",
+            SourceName = "BHA trainers map page",
+            SourceUrl = "https://www.britishhorseracing.com/racing/participants/trainers/trainers-map/",
+            MinimumRequestIntervalSeconds = 10,
+            MaximumResponseBytes = 5_000_000
+        },
+        new()
+        {
+            JobName = "bha-trainers-non-runners-page",
+            SourceName = "BHA trainers non-runners page",
+            SourceUrl = "https://www.britishhorseracing.com/racing/participants/trainers/trainers-non-runners/",
+            MinimumRequestIntervalSeconds = 10,
+            MaximumResponseBytes = 5_000_000
+        }
+    ];
+
+    public string? TrainerApiBearerToken { get; init; }
+
+    public List<BhaRawSourceOptions> TrainerApiSources { get; init; } =
+    [
+        new()
+        {
+            JobName = "bha-trainers-championship-flat-api",
+            SourceName = "BHA flat trainers championship API",
+            SourceUrl = "https://api09.horseracing.software/bha/v1/championships/trainers?type=flat&per_page=5",
+            MinimumRequestIntervalSeconds = 10,
+            MaximumResponseBytes = 20_000_000
+        },
+        new()
+        {
+            JobName = "bha-trainers-championship-jump-api",
+            SourceName = "BHA jump trainers championship API",
+            SourceUrl = "https://api09.horseracing.software/bha/v1/championships/trainers?type=jump&per_page=5",
+            MinimumRequestIntervalSeconds = 10,
+            MaximumResponseBytes = 20_000_000
+        },
+        new()
+        {
+            JobName = "bha-trainers-list-api",
+            SourceName = "BHA trainers list API",
+            SourceUrl = "https://api09.horseracing.software/bha/v1/trainers?page=1&per_page=100",
+            MinimumRequestIntervalSeconds = 10,
+            MaximumResponseBytes = 20_000_000
+        },
+        new()
+        {
+            JobName = "bha-trainers-non-runners-flat-api",
+            SourceName = "BHA flat trainers non-runners API",
+            SourceUrl = "https://api09.horseracing.software/bha/v1/trainers/nonrunners?type=flat",
+            MinimumRequestIntervalSeconds = 10,
+            MaximumResponseBytes = 20_000_000
+        },
+        new()
+        {
+            JobName = "bha-trainers-non-runners-jump-api",
+            SourceName = "BHA jump trainers non-runners API",
+            SourceUrl = "https://api09.horseracing.software/bha/v1/trainers/nonrunners?type=jump",
             MinimumRequestIntervalSeconds = 10,
             MaximumResponseBytes = 20_000_000
         }
