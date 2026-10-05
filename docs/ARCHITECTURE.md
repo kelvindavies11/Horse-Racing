@@ -142,9 +142,9 @@ HorseRacing.Application
 
 ### Web
 
-- Will be a conventional React frontend hosted locally.
-- Reads application data through the local API rather than accessing storage directly.
-- Initially supports data browsing, with prediction views added when prediction data becomes available.
+- Is a conventional React and TypeScript frontend hosted locally.
+- Reads application data through a typed repository boundary rather than accessing storage directly. It currently uses representative fixtures because the Created-layer read endpoint is not implemented; `api` and API-with-fallback modes are configuration-only changes.
+- Provides the initial responsive race-day overview, meeting filters, search, schedule, and loading/empty/error states. Prediction views remain future work.
 
 ## Dependency rule
 
@@ -152,4 +152,4 @@ Source-code dependencies must point inwards. Domain must not reference Applicati
 
 ## Current scope
 
-This remains a scaffold. The expanded domain and its PostgreSQL relationships are implemented; [the data dictionary](DATA-DICTIONARY.md) and [generated SQL](sql/DOMAIN-SCHEMA.sql) describe that implementation. The local scraping jobs, raw layer, created layer, audit/lineage records, domain-projection job, React website and prediction views are planned. Result ingestion, revision history, authentication, operational observability and deployment remain future work. [Project status](PROJECT-STATUS.md) records executed verification gates. Consult [source links](SOURCE-LINKS.md) for research provenance.
+This remains a scaffold. The expanded domain and its PostgreSQL relationships are implemented; [the data dictionary](DATA-DICTIONARY.md) and [generated SQL](sql/DOMAIN-SCHEMA.sql) describe that implementation. The React website foundation is implemented against representative data behind a typed repository. The local scraping jobs, raw layer, created layer, audit/lineage records, domain-projection job, live website data, and prediction views are planned. Result ingestion, revision history, authentication, operational observability and deployment remain future work. [Project status](PROJECT-STATUS.md) records executed verification gates. Consult [source links](SOURCE-LINKS.md) for research provenance.

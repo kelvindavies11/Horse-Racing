@@ -35,6 +35,7 @@ src/
   HorseRacing.Application/     Use cases and persistence abstractions
   HorseRacing.Infrastructure/  EF Core, PostgreSQL, repositories, migrations
   HorseRacing.Api/             HTTP host and endpoints
+  HorseRacing.Web/             React website and typed data-access layer
 tests/
   HorseRacing.Domain.UnitTests/
 docs/
@@ -56,6 +57,7 @@ Dependencies point inwards: `Api -> Infrastructure/Application -> Domain`. The D
 Prerequisites:
 
 - .NET 10 SDK
+- Node.js 22 or later
 - Docker Desktop or another PostgreSQL 17 instance
 
 Start PostgreSQL:
@@ -76,9 +78,19 @@ dotnet run --project src/HorseRacing.Api
 
 The local API defaults to `http://localhost:5080`. Its basic health endpoint is `GET /health`.
 
+Start the website in a second terminal:
+
+```powershell
+cd src/HorseRacing.Web
+npm install
+npm run dev
+```
+
+The website defaults to representative fixture data while the Created-layer read API is pending. Data mode, the future API contract, and frontend quality gates are documented in [the web README](src/HorseRacing.Web/README.md).
+
 ## Current status
 
-The implementation is **IN PROGRESS**. The domain now covers racecourses, meetings, races, horses, stables, trainers, owners, jockeys, runners and race/runner results, with EF mappings, migration and PostgreSQL SQL. The scraping jobs, raw and created data layers, audit trail, domain-projection job, locally hosted React website, and future prediction views are planned. See [Project status](docs/PROJECT-STATUS.md) for actual verification evidence and remaining gaps.
+The implementation is **IN PROGRESS**. The domain now covers racecourses, meetings, races, horses, stables, trainers, owners, jockeys, runners and race/runner results, with EF mappings, migration and PostgreSQL SQL. A React website foundation is present with a typed API boundary and representative fallback data. The scraping jobs, raw and created data layers, audit trail, domain-projection job, live read endpoints, and future prediction views remain planned. See [Project status](docs/PROJECT-STATUS.md) for actual verification evidence and remaining gaps.
 
 The [domain dictionary](docs/DOMAIN-MODEL.md) explains entities and relationships; the [data dictionary](docs/DATA-DICTIONARY.md) records physical columns and constraints. External references are in [source links](docs/SOURCE-LINKS.md), and planned delivery is in the [feature backlog](docs/FEATURES.md).
 

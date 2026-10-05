@@ -27,3 +27,8 @@ Thumbs.db
 
 ## Docker data
 .postgres-data/
+
+## Frontend build output
+node_modules/
+dist/
+*.tsbuildinfo
