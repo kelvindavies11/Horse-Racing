@@ -16,6 +16,18 @@ Overall status: **IN PROGRESS**
 - [x] Markdown architecture, database, workflow, and status documentation
 - [x] Unit-test project and initial domain tests
 
+## Planned target architecture
+
+- [ ] Local jobs to scrape the British Horseracing Authority website
+- [ ] Raw data layer retaining collected source payloads
+- [ ] Raw-to-created validation and mapping
+- [ ] Created data layer with source provenance, `FirstObserved`, and `LastObserved`
+- [ ] Audit trail for raw ingestion and raw-to-created promotion
+- [ ] Local job converting created records into domain objects
+- [ ] Local API read endpoints over the created layer
+- [ ] Locally hosted React website for viewing the collected data
+- [ ] Future prediction generation, persistence, API endpoints, and React views
+
 ## Verification gates
 
 | Gate | Status | Evidence |

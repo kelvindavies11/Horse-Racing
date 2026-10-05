@@ -1,6 +1,31 @@
 # British Horse Racing Data Project
 
-An in-progress .NET service for collecting and managing British horse-racing data. The repository starts with a Clean Architecture foundation, an ASP.NET Core API, and PostgreSQL persistence through Entity Framework Core.
+An in-progress, local-first .NET application for collecting and managing British horse-racing data. The repository starts with a Clean Architecture foundation, an ASP.NET Core API, and PostgreSQL persistence through Entity Framework Core.
+
+The target data flow is:
+
+```text
+British Horseracing Authority website
+                |
+                v
+       Local scraping jobs
+                |
+                v
+           Raw layer
+                |
+                v
+         Created layer
+           /       \
+          v         v
+Local domain job   Local read API
+          |               |
+          v               v
+     Domain objects   React website
+                      - view data
+                      - future predictions
+```
+
+Raw ingestion and promotion into the created layer are audited. Created records retain source provenance and `FirstObserved` / `LastObserved` timestamps so the application can explain where a record came from, when it was first identified, and when it was most recently seen. A straightforward, locally hosted React website sits over the data through the local API. Its initial purpose is to browse the collected data, with prediction views planned for the future.
 
 ## Solution structure
 
@@ -48,6 +73,6 @@ The local API defaults to `http://localhost:5080`. Its basic health endpoint is 
 
 ## Current status
 
-The implementation is **IN PROGRESS**. The solution, database model, and initial migration are present, but build, test, and migration-application gates have not yet been run. See [Project status](docs/PROJECT-STATUS.md) for the explicit gate record.
+The implementation is **IN PROGRESS**. The solution, initial domain database model, and initial migration are present. The scraping jobs, raw and created data layers, audit trail, domain-projection job, locally hosted React website, and future prediction views are target architecture and are not yet implemented. Build, test, and migration-application gates have not yet been run. See [Project status](docs/PROJECT-STATUS.md) for the explicit gate record.
 
 Development branches from and merges back into `main`; see [Development workflow](docs/DEVELOPMENT-WORKFLOW.md).
