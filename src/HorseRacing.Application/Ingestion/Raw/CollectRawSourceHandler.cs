@@ -112,7 +112,8 @@ public sealed class CollectRawSourceHandler(
             payloadId,
             response.StatusCode,
             errorCode,
-            errorMessage);
+            errorMessage,
+            response.Content);
     }
 
     private async Task RespectMinimumIntervalAsync(

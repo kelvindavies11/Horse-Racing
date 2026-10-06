@@ -7,6 +7,7 @@ import type {
   CuratedEntity,
   CuratedEntityPage,
   CuratedOverview,
+  RaceResultsFeed,
   RelationshipGraph,
 } from "./domain/curated";
 
@@ -104,6 +105,48 @@ const audit: AuditSnapshot = {
   }],
 };
 
+const raceResults: RaceResultsFeed = {
+  generatedAtUtc: "2026-10-06T09:00:00Z",
+  fromDate: "2026-09-29",
+  toDate: "2026-10-05",
+  totalRaces: 1,
+  totalRunners: 3,
+  weatherEnrichedRaces: 1,
+  items: [{
+    id: "race-1",
+    sourceKey: "2026:5706:0",
+    raceName: "The EBF Slip Anchor Maiden Stakes",
+    courseName: "Nottingham",
+    startUtc: "2026-10-01T12:23:00Z",
+    raceType: "FLAT",
+    raceClass: 4,
+    distance: "5f 8y",
+    going: "Good, Good to Firm in places",
+    prizeAmount: 11000,
+    prizeCurrency: "GBP",
+    abandoned: false,
+    winner: "Caelum (IRE)",
+    location: { latitude: 52.9548, longitude: -1.127, postcode: "NG2 4BE", locationSource: "BHA" },
+    weather: {
+      weatherHourUtc: "2026-10-01T12:00:00Z",
+      temperatureC: 17.6,
+      apparentTemperatureC: 15.2,
+      relativeHumidityPercent: 58,
+      precipitationMillimetres: 0,
+      weatherCode: 0,
+      windSpeedKilometresPerHour: 14.2,
+      windDirectionDegrees: 218,
+      windGustKilometresPerHour: 33.5,
+      sourceUrl: "https://archive-api.open-meteo.com/v1/archive?latitude=52.9548",
+    },
+    runners: [
+      { finishPosition: 1, horseName: "Caelum (IRE)", clothNumber: 1, draw: 3, jockeyName: "Kevin Stott", trainerName: "Kevin Ryan", ownerName: "Caelum Partners", status: "Runner", bettingRatio: "8/15", finishTime: "1m 0.97s" },
+      { finishPosition: 2, horseName: "Crimson Blaze (GB)", clothNumber: 2, draw: 4, jockeyName: "William Buick", trainerName: "Richard Hughes", ownerName: "Jastar Capital", status: "Runner", bettingRatio: "10/1", distanceFromWinner: "1 length", finishTime: "1m 1.14s" },
+      { finishPosition: null, horseName: "Lady Branksome (IRE)", clothNumber: 3, draw: 5, jockeyName: "Non Runner", trainerName: "Michael Bell", ownerName: "Middleham Park Racing", status: "NonRunner", nonRunnerReason: "Vets Cert (Other)" },
+    ],
+  }],
+};
+
 const json = (value: unknown) => Promise.resolve(new Response(JSON.stringify(value), { status: 200, headers: { "Content-Type": "application/json" } }));
 
 beforeEach(() => {
@@ -113,6 +156,7 @@ beforeEach(() => {
     const url = new URL(typeof input === "string" ? input : input.toString(), "http://localhost");
     if (url.pathname.endsWith("/curated/overview")) return json(overview);
     if (url.pathname.endsWith("/curated/relationships")) return json(relationships);
+    if (url.pathname.endsWith("/curated/results")) return json(raceResults);
     if (url.pathname.endsWith("/admin/audit")) return json(audit);
     if (url.pathname.endsWith("/curated/entities")) {
       const type = url.searchParams.get("type");
@@ -169,5 +213,18 @@ describe("curated data workspace", () => {
     expect(screen.getByRole("table", { name: "Raw collection runs" })).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: /Curated promotion/i }));
     expect(screen.getByRole("table", { name: "Curated promotion runs" })).toBeInTheDocument();
+  });
+
+  it("shows persisted race results with course and race-time weather", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole("heading", { name: "Observed records" });
+    await user.click(screen.getByRole("button", { name: /Race results/i }));
+    const detail = await screen.findByTestId("race-result-detail");
+    expect(within(detail).getByRole("heading", { name: "The EBF Slip Anchor Maiden Stakes" })).toBeInTheDocument();
+    expect(within(detail).getAllByText("Caelum (IRE)").length).toBeGreaterThan(0);
+    expect(within(detail).getByText("17.6°")).toBeInTheDocument();
+    expect(within(detail).getByText("52.9548, -1.1270")).toBeInTheDocument();
+    expect(within(detail).getByRole("table", { name: /Finishing order/i })).toBeInTheDocument();
   });
 });

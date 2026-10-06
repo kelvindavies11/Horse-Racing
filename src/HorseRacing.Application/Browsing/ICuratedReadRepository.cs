@@ -12,6 +12,11 @@ public interface ICuratedReadRepository
         int limit,
         CancellationToken cancellationToken);
 
+    Task<RaceResultsFeed> GetRaceResultsAsync(
+        DateOnly fromDate,
+        DateOnly toDate,
+        CancellationToken cancellationToken);
+
     Task<AuditSnapshot> GetAuditAsync(
         int limit,
         CancellationToken cancellationToken);

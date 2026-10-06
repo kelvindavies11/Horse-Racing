@@ -104,6 +104,32 @@ public sealed class BhaCuratedDomainObjectExtractorTests
         Assert.Empty(result.DomainObjects);
     }
 
+    [Fact]
+    public void Historical_result_payloads_promote_the_full_hierarchy_with_stable_composite_keys()
+    {
+        var extractor = new BhaCuratedDomainObjectExtractor();
+
+        var meeting = Assert.Single(extractor.Extract(CreatePayload(
+            "bha-results-fixtures-2026-10-page-1",
+            "https://api09.horseracing.software/bha/v1/fixtures/?resultsAvailable=1&year=2026&month=10&page=1",
+            """{"data":[{"fixtureYear":2026,"fixtureId":101,"courseName":"Ascot"}]}""")).DomainObjects);
+        var race = Assert.Single(extractor.Extract(CreatePayload(
+            "bha-results-races-2026-101",
+            "https://api09.horseracing.software/bha/v1/fixtures/2026/101/races",
+            """{"data":[{"yearOfRace":2026,"raceId":202,"divisionSequence":1,"raceName":"Example Stakes"}]}""")).DomainObjects);
+        var runners = extractor.Extract(CreatePayload(
+            "bha-results-runners-2026-202-1",
+            "https://api09.horseracing.software/bha/v1/races/2026/202/1/results",
+            """{"data":[{"yearOfRace":2026,"raceId":202,"divisionSequence":1,"animalId":301,"racehorseName":"First Horse"},{"yearOfRace":2026,"raceId":202,"divisionSequence":1,"animalId":302,"racehorseName":"Second Horse"}]}""")).DomainObjects;
+
+        Assert.Equal(("Meeting", "2026:101"), (meeting.DomainObjectType, meeting.SourceKey));
+        Assert.Equal(("Race", "2026:202:1"), (race.DomainObjectType, race.SourceKey));
+        Assert.Collection(
+            runners.OrderBy(candidate => candidate.SourceKey),
+            candidate => Assert.Equal(("RunnerResult", "2026:202:1:301", "First Horse"), (candidate.DomainObjectType, candidate.SourceKey, candidate.DisplayName)),
+            candidate => Assert.Equal(("RunnerResult", "2026:202:1:302", "Second Horse"), (candidate.DomainObjectType, candidate.SourceKey, candidate.DisplayName)));
+    }
+
     private static RawPayloadForPromotion CreatePayload(
         string jobName,
         string sourceUrl,

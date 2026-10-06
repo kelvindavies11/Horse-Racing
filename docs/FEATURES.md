@@ -101,6 +101,13 @@ Each feature below is independently deliverable and must complete the entire sli
 - [ ] **Race results** — capture race-level result facts such as outcome/status, timing and result publication/correction state, preserving later official corrections as new observations. Dependencies: races.
 - [ ] **Runner results** — capture finishing position or non-finish code, distances, starting price and other available performance facts; link unambiguously to the race result and runner/horse. Dependencies: race results and runners/entries.
 
+Implemented subset: the bounded historical sync now retains BHA result fixture, race and
+runner payloads in Raw; promotes stable Meeting, Race and RunnerResult source identities;
+serves a typed result/finishing-order read model; and shows it with BHA course location
+and Open-Meteo race-hour weather in the website. Official correction history, complete
+entity-specific validation and domain projection remain open, so the broader slices above
+are intentionally not marked complete.
+
 ### Epic acceptance criteria
 
 - [ ] Every checked entity has a documented stable identity and satisfies every item in the standard slice contract.

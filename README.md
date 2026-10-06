@@ -36,6 +36,7 @@ src/
   HorseRacing.Infrastructure/  EF Core, PostgreSQL, repositories, migrations
   HorseRacing.Bha.RawCollector/ Manual BHA source-to-Raw console job
   HorseRacing.Bha.CuratedPromoter/ Manual Raw-to-Curated console job
+  HorseRacing.RaceDataSync/      Historical results/location/weather sync
   HorseRacing.Api/             HTTP host and endpoints
   HorseRacing.Web/             React website and typed data-access layer
 tests/
@@ -51,6 +52,7 @@ docs/
   SOURCE-LINKS.md
   FEATURES.md
   PROJECT-STATUS.md
+  RACE-RESULTS-WEATHER.md
   sql/DOMAIN-SCHEMA.sql
 ```
 
@@ -108,6 +110,19 @@ recorded reason; invalid JSON and mapping failures are retained as promotion err
 the [BHA Curated promoter guide](docs/BHA-CURATED-PROMOTER.md) for configuration and
 inspection details.
 
+Collect and promote a historical result range, then attach course location and hourly
+historical weather to every available race:
+
+```powershell
+$env:BhaCollection__RacingStatusApiBearerToken = '<operator-supplied token>'
+dotnet run --project src/HorseRacing.RaceDataSync -- --from 2026-09-29 --to 2026-10-05
+```
+
+The sync defaults to the seven most recently completed dates and is limited to 32 days.
+It uses audited BHA result/course payloads and Open-Meteo historical weather, with no
+credential committed or sent to the browser. See the
+[race results and weather guide](docs/RACE-RESULTS-WEATHER.md).
+
 Start the website in a second terminal:
 
 ```powershell
@@ -116,7 +131,7 @@ npm install
 npm run dev
 ```
 
-The website reads Curated-layer data through the local API only. It provides entity browsing, provenance inspection, inferred relationship patterns and a read-only Raw/Curated job audit. Endpoint configuration and frontend quality gates are documented in [the web README](src/HorseRacing.Web/README.md).
+The website reads Curated-layer data through the local API only. It provides race results with complete finishing order, course location and race-hour weather, plus entity browsing, provenance inspection, inferred relationship patterns and a read-only Raw/Curated job audit. Endpoint configuration and frontend quality gates are documented in [the web README](src/HorseRacing.Web/README.md).
 
 ## Current status
 

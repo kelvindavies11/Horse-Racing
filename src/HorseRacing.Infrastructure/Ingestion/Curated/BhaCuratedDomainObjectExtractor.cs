@@ -117,6 +117,21 @@ public sealed class BhaCuratedDomainObjectExtractor : ICuratedRawPayloadExtracto
             return "Racecourse";
         }
 
+        if (jobName.Contains("results-runners", StringComparison.Ordinal))
+        {
+            return "RunnerResult";
+        }
+
+        if (jobName.Contains("results-races", StringComparison.Ordinal))
+        {
+            return "Race";
+        }
+
+        if (jobName.Contains("results-fixtures", StringComparison.Ordinal))
+        {
+            return "Meeting";
+        }
+
         if (jobName.Contains("racehorse", StringComparison.Ordinal))
         {
             return "Horse";
@@ -275,7 +290,8 @@ public sealed class BhaCuratedDomainObjectExtractor : ICuratedRawPayloadExtracto
         }
 
         var sourceKey = BoundSourceKey(
-            GetFirstScalar(record, GetSourceKeyFields(domainObjectType))
+            GetCompositeSourceKey(record, domainObjectType)
+            ?? GetFirstScalar(record, GetSourceKeyFields(domainObjectType))
             ?? CreateRecordHash(record));
         var displayName = Truncate(
             GetFirstScalar(record, GetDisplayNameFields(domainObjectType))
@@ -303,6 +319,7 @@ public sealed class BhaCuratedDomainObjectExtractor : ICuratedRawPayloadExtracto
             "Meeting" => ["fixtureId", "fixtureKey", "id", "courseId", "courseName", "fixtureDate"],
             "Race" => ["raceId", "raceKey", "divisionSequence", "id", "raceName", "name"],
             "Runner" => ["runnerId", "entryId", "horseId", "racehorseId", "id", "horseName", "name"],
+            "RunnerResult" => ["animalId", "runnerId", "entryId", "horseId", "racehorseId", "id", "horseName", "racehorseName", "name"],
             "RaceResult" => ["resultId", "raceId", "fixtureId", "id", "raceName", "courseName"],
             "RaceGoing" => ["fixtureId", "raceId", "id", "courseName"],
             "StewardReport" => ["reportId", "raceId", "fixtureId", "id", "title", "raceName"],
@@ -320,11 +337,42 @@ public sealed class BhaCuratedDomainObjectExtractor : ICuratedRawPayloadExtracto
             "Meeting" => ["fixtureName", "meetingName", "courseName", "name"],
             "Race" => ["raceName", "name", "title"],
             "Runner" => ["horseName", "name"],
+            "RunnerResult" => ["racehorseName", "horseName", "name"],
             "RaceResult" => ["raceName", "courseName", "name", "title"],
             "RaceGoing" => ["courseName", "raceName", "name"],
             "StewardReport" => ["title", "raceName", "courseName", "name"],
             _ => ["displayName", "name", "title"]
         };
+
+    private static string? GetCompositeSourceKey(JsonElement record, string domainObjectType)
+    {
+        string?[] parts = domainObjectType switch
+        {
+            "Meeting" =>
+            [
+                GetFirstScalar(record, ["fixtureYear"]),
+                GetFirstScalar(record, ["fixtureId"])
+            ],
+            "Race" =>
+            [
+                GetFirstScalar(record, ["yearOfRace", "raceYear"]),
+                GetFirstScalar(record, ["raceId"]),
+                GetFirstScalar(record, ["divisionSequence"])
+            ],
+            "RunnerResult" =>
+            [
+                GetFirstScalar(record, ["yearOfRace", "raceYear"]),
+                GetFirstScalar(record, ["raceId"]),
+                GetFirstScalar(record, ["divisionSequence"]),
+                GetFirstScalar(record, ["animalId", "runnerId", "horseId", "racehorseId"])
+            ],
+            _ => []
+        };
+
+        return parts.Length > 0 && parts.All(part => !string.IsNullOrWhiteSpace(part))
+            ? string.Join(':', parts)
+            : null;
+    }
 
     private static string? GetFirstScalar(JsonElement element, IEnumerable<string> propertyNames)
     {

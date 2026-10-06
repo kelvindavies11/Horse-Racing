@@ -72,7 +72,14 @@ These are recorded gaps, not implemented tables. Source discovery determines whi
 
 ## Fit with Raw and Created layers
 
-Raw payloads, extraction runs, promotion runs and Created records are pipeline concepts, not these domain aggregates. Created records retain stable source identity, source URL, Raw lineage, FirstObserved and LastObserved; the projection job resolves internal identities and enforces domain rules. All of those pipeline stores remain planned. Do not add observation timestamps to racing facts as a substitute for ingestion lineage.
+Raw payloads, collection runs, promotion runs and Curated records are pipeline concepts, not these domain aggregates. Curated records retain stable source identity, source URL, Raw lineage, FirstObserved and LastObserved; a future projection job will resolve internal identities and enforce domain rules. Do not add observation timestamps to racing facts as a substitute for ingestion lineage.
+
+The implemented historical result slice remains in Curated: BHA meetings, races and
+runner results are generic source objects, while normalized course location and
+race-hour weather are Curated enrichments. Weather is intentionally not added to the
+domain `RaceResult`; it describes environmental context at a time/location and keeps its
+own Open-Meteo lineage. Domain projection and official result revision history remain
+separate future work.
 
 ## Implementation order
 

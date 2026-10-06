@@ -112,6 +112,53 @@ Unique `(source_system, domain_object_type, source_key)` is the Curated upsert i
 CHECK constraints require `source_data` to be a JSON object and prevent the last
 observation timestamp from preceding the first.
 
+## Curated race enrichment tables
+
+### curated.racecourse_locations — source-backed course location
+
+| Column | PostgreSQL type | Required | Meaning |
+| --- | --- | --- | --- |
+| id | uuid | Yes | Curated location PK |
+| source_system | varchar(50) | Yes | `BHA` for the implemented slice |
+| source_course_key | varchar(300) | Yes | Stable BHA course identity |
+| course_name | varchar(200) | Yes | Source course display name |
+| postcode | varchar(20) | No | BHA/geocoder postcode when available |
+| latitude | numeric(9,6) | Yes | WGS84 latitude, -90 through 90 |
+| longitude | numeric(9,6) | Yes | WGS84 longitude, -180 through 180 |
+| time_zone | varchar(100) | Yes | IANA timezone; `Europe/London` in British scope |
+| location_source | varchar(100) | Yes | Whether coordinates came from BHA or Open-Meteo geocoding |
+| source_url | varchar(2048) | Yes | Location source URL |
+| raw_payload_id | uuid | Yes | FK → raw.payloads |
+| raw_collection_run_id | uuid | Yes | FK → raw.collection_runs |
+| resolved_at_utc | timestamptz | Yes | Location resolution time |
+
+Unique `(source_system, source_course_key)` preserves one normalized location per source course. Raw lineage foreign keys are restricted on delete. Latitude/longitude CHECK constraints protect valid WGS84 ranges.
+
+### curated.race_weather — historical weather at race hour
+
+| Column | PostgreSQL type | Required | Meaning |
+| --- | --- | --- | --- |
+| id | uuid | Yes | Weather enrichment PK |
+| curated_race_id | uuid | Yes | Unique FK → curated.domain_objects for the race |
+| racecourse_location_id | uuid | Yes | FK → curated.racecourse_locations |
+| race_start_utc | timestamptz | Yes | Advertised BHA race start normalized to UTC |
+| weather_hour_utc | timestamptz | Yes | Open-Meteo hourly bucket normalized to UTC |
+| temperature_c | numeric(5,2) | Yes | Air temperature in °C |
+| apparent_temperature_c | numeric(5,2) | Yes | Apparent temperature in °C |
+| relative_humidity_percent | integer | Yes | Relative humidity, 0–100 |
+| precipitation_millimetres | numeric(8,2) | Yes | Total precipitation in millimetres, non-negative |
+| rain_millimetres | numeric(8,2) | Yes | Rain in millimetres, non-negative |
+| weather_code | integer | Yes | Open-Meteo WMO interpretation code, 0–99 |
+| wind_speed_kilometres_per_hour | numeric(7,2) | Yes | 10 m wind speed, non-negative |
+| wind_direction_degrees | integer | Yes | Wind direction, 0–360 degrees |
+| wind_gust_kilometres_per_hour | numeric(7,2) | Yes | 10 m gust speed, non-negative |
+| source_url | varchar(2048) | Yes | Open-Meteo archive request URL |
+| raw_payload_id | uuid | Yes | FK → raw.payloads |
+| raw_collection_run_id | uuid | Yes | FK → raw.collection_runs |
+| retrieved_at_utc | timestamptz | Yes | Weather response retrieval time |
+
+One row is stored per Curated race. The location/start index supports course/date exploration; source and Raw links preserve full weather lineage. CHECK constraints protect humidity, precipitation, WMO code and wind ranges.
+
 ## Reference and connection tables
 
 ### racecourses — Racecourse

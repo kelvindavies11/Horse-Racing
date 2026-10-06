@@ -4,6 +4,7 @@ import type {
   AuditSnapshot,
   CuratedEntityPage,
   CuratedOverview,
+  RaceResultsFeed,
   RelationshipGraph,
 } from "../domain/curated";
 
@@ -75,6 +76,40 @@ export const useAudit = (active: boolean) => {
     setError(undefined);
     curatedRepository
       .getAudit(controller.signal)
+      .then((value) => {
+        setData(value);
+        setIsLoading(false);
+      })
+      .catch((caught: unknown) => {
+        if (!controller.signal.aborted) {
+          setError(messageFor(caught));
+          setIsLoading(false);
+        }
+      });
+    return () => controller.abort();
+  }, [active, reloadKey]);
+
+  return {
+    data,
+    error,
+    isLoading,
+    reload: useCallback(() => setReloadKey((value) => value + 1), []),
+  };
+};
+
+export const useRaceResults = (active: boolean) => {
+  const [reloadKey, setReloadKey] = useState(0);
+  const [data, setData] = useState<RaceResultsFeed>();
+  const [error, setError] = useState<string>();
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!active) return;
+    const controller = new AbortController();
+    setIsLoading(true);
+    setError(undefined);
+    curatedRepository
+      .getResults(controller.signal)
       .then((value) => {
         setData(value);
         setIsLoading(false);

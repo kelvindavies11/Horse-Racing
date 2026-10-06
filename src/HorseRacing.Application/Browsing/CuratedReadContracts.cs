@@ -52,6 +52,66 @@ public sealed record RelationshipEdge(Guid SourceId, Guid TargetId, string Label
 
 public sealed record RelationshipPattern(string SourceType, string TargetType, int Count);
 
+public sealed record RaceResultsFeed(
+    DateTimeOffset GeneratedAtUtc,
+    DateOnly FromDate,
+    DateOnly ToDate,
+    int TotalRaces,
+    int TotalRunners,
+    int WeatherEnrichedRaces,
+    IReadOnlyCollection<CuratedRaceResult> Items);
+
+public sealed record CuratedRaceResult(
+    Guid Id,
+    string SourceKey,
+    string RaceName,
+    string CourseName,
+    DateTimeOffset StartUtc,
+    string RaceType,
+    int? RaceClass,
+    string Distance,
+    string Going,
+    decimal? PrizeAmount,
+    string? PrizeCurrency,
+    bool Abandoned,
+    string? Winner,
+    RacecourseLocationView? Location,
+    RaceWeatherView? Weather,
+    IReadOnlyCollection<RunnerResultView> Runners);
+
+public sealed record RacecourseLocationView(
+    decimal Latitude,
+    decimal Longitude,
+    string? Postcode,
+    string LocationSource);
+
+public sealed record RaceWeatherView(
+    DateTimeOffset WeatherHourUtc,
+    decimal TemperatureC,
+    decimal ApparentTemperatureC,
+    int RelativeHumidityPercent,
+    decimal PrecipitationMillimetres,
+    int WeatherCode,
+    decimal WindSpeedKilometresPerHour,
+    int WindDirectionDegrees,
+    decimal WindGustKilometresPerHour,
+    string SourceUrl);
+
+public sealed record RunnerResultView(
+    int? FinishPosition,
+    string HorseName,
+    int? ClothNumber,
+    int? Draw,
+    string? JockeyName,
+    string? TrainerName,
+    string? OwnerName,
+    string Status,
+    string? BettingRatio,
+    string? DistanceFromWinner,
+    string? FinishTime,
+    string? NonRunnerReason,
+    string? SilkImageUrl);
+
 public sealed record AuditSnapshot(
     DateTimeOffset GeneratedAtUtc,
     AuditSummary Summary,

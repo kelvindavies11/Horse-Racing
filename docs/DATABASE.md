@@ -66,6 +66,14 @@ latter stores typed source-object records with Raw lineage, `FirstObserved`,
 [BHA Raw collector guide](BHA-RAW-COLLECTOR.md) and
 [BHA Curated promoter guide](BHA-CURATED-PROMOTER.md).
 
+`AddRaceResultsWeather` adds `curated.racecourse_locations` and
+`curated.race_weather`. The former upserts one normalized location per BHA course
+identity with Raw provenance. The latter stores one Open-Meteo hourly observation per
+Curated Race record, linked to its location and Raw weather response. Both tables use
+restricted foreign keys so audited Raw evidence cannot be deleted through an enrichment
+delete. Operating instructions are in the
+[race results and weather guide](RACE-RESULTS-WEATHER.md).
+
 Domain persistence remains a later projection target rather than the Raw collector's or
 Curated promoter's direct output.
 

@@ -2,6 +2,7 @@ import type {
   AuditSnapshot,
   CuratedEntityPage,
   CuratedOverview,
+  RaceResultsFeed,
   RelationshipGraph,
 } from "../domain/curated";
 
@@ -41,6 +42,10 @@ export const curatedRepository = {
 
   getRelationships(signal?: AbortSignal) {
     return readJson<RelationshipGraph>("/v1/curated/relationships?limit=500", signal);
+  },
+
+  getResults(signal?: AbortSignal) {
+    return readJson<RaceResultsFeed>("/v1/curated/results", signal);
   },
 
   getAudit(signal?: AbortSignal) {

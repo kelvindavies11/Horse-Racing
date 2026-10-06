@@ -54,4 +54,5 @@ public sealed record RawCollectionResult(
     Guid? PayloadId,
     int? HttpStatusCode,
     string? ErrorCode,
-    string? ErrorMessage);
+    string? ErrorMessage,
+    byte[]? Content = null);

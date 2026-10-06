@@ -795,3 +795,124 @@ BEGIN
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261006092937_AddRaceResultsWeather') THEN
+    CREATE TABLE curated.racecourse_locations (
+        id uuid NOT NULL,
+        source_system character varying(50) NOT NULL,
+        source_course_key character varying(300) NOT NULL,
+        course_name character varying(200) NOT NULL,
+        postcode character varying(20),
+        latitude numeric(9,6) NOT NULL,
+        longitude numeric(9,6) NOT NULL,
+        time_zone character varying(100) NOT NULL,
+        location_source character varying(100) NOT NULL,
+        source_url character varying(2048) NOT NULL,
+        raw_payload_id uuid NOT NULL,
+        raw_collection_run_id uuid NOT NULL,
+        resolved_at_utc timestamp with time zone NOT NULL,
+        CONSTRAINT "PK_racecourse_locations" PRIMARY KEY (id),
+        CONSTRAINT ck_curated_racecourse_locations_latitude CHECK (latitude BETWEEN -90 AND 90),
+        CONSTRAINT ck_curated_racecourse_locations_longitude CHECK (longitude BETWEEN -180 AND 180),
+        CONSTRAINT fk_curated_racecourse_locations_raw_collection_runs_raw_collection_run_id FOREIGN KEY (raw_collection_run_id) REFERENCES raw.collection_runs (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_curated_racecourse_locations_raw_payloads_raw_payload_id FOREIGN KEY (raw_payload_id) REFERENCES raw.payloads (id) ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261006092937_AddRaceResultsWeather') THEN
+    CREATE TABLE curated.race_weather (
+        id uuid NOT NULL,
+        curated_race_id uuid NOT NULL,
+        racecourse_location_id uuid NOT NULL,
+        race_start_utc timestamp with time zone NOT NULL,
+        weather_hour_utc timestamp with time zone NOT NULL,
+        temperature_c numeric(5,2) NOT NULL,
+        apparent_temperature_c numeric(5,2) NOT NULL,
+        relative_humidity_percent integer NOT NULL,
+        precipitation_millimetres numeric(8,2) NOT NULL,
+        rain_millimetres numeric(8,2) NOT NULL,
+        weather_code integer NOT NULL,
+        wind_speed_kilometres_per_hour numeric(7,2) NOT NULL,
+        wind_direction_degrees integer NOT NULL,
+        wind_gust_kilometres_per_hour numeric(7,2) NOT NULL,
+        source_url character varying(2048) NOT NULL,
+        raw_payload_id uuid NOT NULL,
+        raw_collection_run_id uuid NOT NULL,
+        retrieved_at_utc timestamp with time zone NOT NULL,
+        CONSTRAINT "PK_race_weather" PRIMARY KEY (id),
+        CONSTRAINT ck_curated_race_weather_code CHECK (weather_code BETWEEN 0 AND 99),
+        CONSTRAINT ck_curated_race_weather_humidity CHECK (relative_humidity_percent BETWEEN 0 AND 100),
+        CONSTRAINT ck_curated_race_weather_precipitation CHECK (precipitation_millimetres >= 0 AND rain_millimetres >= 0),
+        CONSTRAINT ck_curated_race_weather_wind CHECK (wind_speed_kilometres_per_hour >= 0 AND wind_gust_kilometres_per_hour >= 0 AND wind_direction_degrees BETWEEN 0 AND 360),
+        CONSTRAINT fk_curated_race_weather_domain_objects_curated_race_id FOREIGN KEY (curated_race_id) REFERENCES curated.domain_objects (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_curated_race_weather_locations_racecourse_location_id FOREIGN KEY (racecourse_location_id) REFERENCES curated.racecourse_locations (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_curated_race_weather_raw_collection_runs_raw_collection_run_id FOREIGN KEY (raw_collection_run_id) REFERENCES raw.collection_runs (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_curated_race_weather_raw_payloads_raw_payload_id FOREIGN KEY (raw_payload_id) REFERENCES raw.payloads (id) ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261006092937_AddRaceResultsWeather') THEN
+    CREATE INDEX ix_curated_race_weather_location_start ON curated.race_weather (racecourse_location_id, race_start_utc);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261006092937_AddRaceResultsWeather') THEN
+    CREATE INDEX ix_curated_race_weather_raw_collection_run_id ON curated.race_weather (raw_collection_run_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261006092937_AddRaceResultsWeather') THEN
+    CREATE INDEX ix_curated_race_weather_raw_payload_id ON curated.race_weather (raw_payload_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261006092937_AddRaceResultsWeather') THEN
+    CREATE UNIQUE INDEX ux_curated_race_weather_curated_race_id ON curated.race_weather (curated_race_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261006092937_AddRaceResultsWeather') THEN
+    CREATE INDEX ix_curated_racecourse_locations_raw_collection_run_id ON curated.racecourse_locations (raw_collection_run_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261006092937_AddRaceResultsWeather') THEN
+    CREATE INDEX ix_curated_racecourse_locations_raw_payload_id ON curated.racecourse_locations (raw_payload_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261006092937_AddRaceResultsWeather') THEN
+    CREATE UNIQUE INDEX ux_curated_racecourse_locations_source_identity ON curated.racecourse_locations (source_system, source_course_key);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261006092937_AddRaceResultsWeather') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20261006092937_AddRaceResultsWeather', '10.0.12');
+    END IF;
+END $EF$;
+COMMIT;
+

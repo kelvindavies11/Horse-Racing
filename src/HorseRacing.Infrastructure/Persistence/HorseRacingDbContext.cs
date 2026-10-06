@@ -1,6 +1,7 @@
 using HorseRacing.Domain.Entities;
 using HorseRacing.Infrastructure.Ingestion.Curated;
 using HorseRacing.Infrastructure.Ingestion.Raw;
+using HorseRacing.Infrastructure.Ingestion.Weather;
 using Microsoft.EntityFrameworkCore;
 
 namespace HorseRacing.Infrastructure.Persistence;
@@ -15,6 +16,10 @@ public sealed class HorseRacingDbContext(DbContextOptions<HorseRacingDbContext> 
     public DbSet<CuratedPromotionRun> CuratedPromotionRuns => Set<CuratedPromotionRun>();
 
     public DbSet<CuratedDomainObject> CuratedDomainObjects => Set<CuratedDomainObject>();
+
+    public DbSet<CuratedRacecourseLocation> CuratedRacecourseLocations => Set<CuratedRacecourseLocation>();
+
+    public DbSet<CuratedRaceWeather> CuratedRaceWeather => Set<CuratedRaceWeather>();
 
     public DbSet<Horse> Horses => Set<Horse>();
 

@@ -65,6 +65,12 @@ rows into typed curated domain-object records, and writes only to the PostgreSQL
 `curated` schema. Unsupported raw media is recorded as skipped, invalid JSON is recorded
 as failed, and Raw evidence is never updated in place.
 
+`HorseRacing.RaceDataSync` is the first entity-specific orchestration job. For a bounded
+historical range it traverses BHA result fixtures, fixture races and per-race results,
+promotes stable Meeting, Race and RunnerResult identities, resolves the matching BHA
+course location, and captures Open-Meteo historical weather for each race's local hour.
+Every network response still passes through the same immutable Raw/audit boundary.
+
 ### Raw data layer
 
 - Stores the source data as it was collected, before application-specific interpretation.
@@ -163,13 +169,14 @@ HorseRacing.Application
 - Is the application composition root.
 - Hosts HTTP endpoints and maps transport requests to Application commands.
 - Provides versioned Curated read endpoints and a read-only Raw/Curated audit endpoint used by the local React website.
+- Provides a typed historical result endpoint joining the Curated result hierarchy, normalized course location and race-hour weather.
 - Does not contain persistence rules.
 
 ### Web
 
 - Is a conventional React and TypeScript frontend hosted locally.
 - Reads application data through a typed repository boundary rather than accessing storage directly. It has no fixture or fallback data mode: an unavailable API produces an explicit error state.
-- Provides responsive Curated type summaries, search, type filtering, bounded pagination, record/lineage inspection, inferred reference-pattern exploration and a read-only Raw/Curated job audit. Prediction views remain future work.
+- Provides a results-first workspace with finishing order, location and weather, responsive Curated type summaries, search, type filtering, bounded pagination, record/lineage inspection, inferred reference-pattern exploration and a read-only Raw/Curated job audit. Prediction views remain future work.
 
 ## Dependency rule
 

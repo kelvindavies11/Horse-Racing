@@ -65,6 +65,71 @@ export interface RelationshipGraph {
   patterns: RelationshipPattern[];
 }
 
+export interface RacecourseLocationView {
+  latitude: number;
+  longitude: number;
+  postcode?: string | null;
+  locationSource: string;
+}
+
+export interface RaceWeatherView {
+  weatherHourUtc: string;
+  temperatureC: number;
+  apparentTemperatureC: number;
+  relativeHumidityPercent: number;
+  precipitationMillimetres: number;
+  weatherCode: number;
+  windSpeedKilometresPerHour: number;
+  windDirectionDegrees: number;
+  windGustKilometresPerHour: number;
+  sourceUrl: string;
+}
+
+export interface RunnerResultView {
+  finishPosition?: number | null;
+  horseName: string;
+  clothNumber?: number | null;
+  draw?: number | null;
+  jockeyName?: string | null;
+  trainerName?: string | null;
+  ownerName?: string | null;
+  status: string;
+  bettingRatio?: string | null;
+  distanceFromWinner?: string | null;
+  finishTime?: string | null;
+  nonRunnerReason?: string | null;
+  silkImageUrl?: string | null;
+}
+
+export interface CuratedRaceResult {
+  id: string;
+  sourceKey: string;
+  raceName: string;
+  courseName: string;
+  startUtc: string;
+  raceType: string;
+  raceClass?: number | null;
+  distance: string;
+  going: string;
+  prizeAmount?: number | null;
+  prizeCurrency?: string | null;
+  abandoned: boolean;
+  winner?: string | null;
+  location?: RacecourseLocationView | null;
+  weather?: RaceWeatherView | null;
+  runners: RunnerResultView[];
+}
+
+export interface RaceResultsFeed {
+  generatedAtUtc: string;
+  fromDate: string;
+  toDate: string;
+  totalRaces: number;
+  totalRunners: number;
+  weatherEnrichedRaces: number;
+  items: CuratedRaceResult[];
+}
+
 export interface AuditSummary {
   totalRawRuns: number;
   failedRawRuns: number;

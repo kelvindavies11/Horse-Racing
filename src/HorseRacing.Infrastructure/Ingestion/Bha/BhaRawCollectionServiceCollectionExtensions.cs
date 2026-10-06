@@ -1,4 +1,5 @@
 using HorseRacing.Application.Ingestion.Raw;
+using HorseRacing.Application.Ingestion.Results;
 using HorseRacing.Infrastructure.Ingestion.Raw;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,6 +21,8 @@ public static class BhaRawCollectionServiceCollectionExtensions
 
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<IRawIngestionRepository, RawIngestionRepository>();
+        services.AddScoped<IRaceResultsPayloadInterpreter, BhaResultsPayloadInterpreter>();
+        services.AddScoped<CollectRaceResultsHistoryHandler>();
 
         services
             .AddHttpClient<BhaPageClient>(ConfigureHttpClient)
@@ -185,6 +188,15 @@ public static class BhaRawCollectionServiceCollectionExtensions
 
         services
             .AddHttpClient<BhaRacingStatusApiClient>(ConfigureHttpClient)
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                AllowAutoRedirect = true,
+                MaxAutomaticRedirections = 3,
+                UseCookies = false
+            });
+
+        services
+            .AddHttpClient<IRaceResultsRawSourceClient, BhaHistoricalResultsApiClient>(ConfigureHttpClient)
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
             {
                 AllowAutoRedirect = true,
