@@ -59,6 +59,12 @@ promote racecourse, meeting, race, runner, horse, jockey, trainer, owner, result
 steward-report records. API sources require operator-supplied bearer tokens outside
 source control.
 
+The first Raw-to-Created job is the manually run `HorseRacing.Bha.CuratedPromoter` .NET
+console application. It reads successful immutable Raw payloads, maps supported BHA JSON
+rows into typed curated domain-object records, and writes only to the PostgreSQL
+`curated` schema. Unsupported raw media is recorded as skipped, invalid JSON is recorded
+as failed, and Raw evidence is never updated in place.
+
 ### Raw data layer
 
 - Stores the source data as it was collected, before application-specific interpretation.
@@ -67,9 +73,8 @@ source control.
 
 The implemented Raw foundation uses `raw.payloads` for exact response bytes and response
 metadata, and `raw.collection_runs` for source-to-Raw outcomes and errors. Raw-to-Created
-conversion remains a separate, not-yet-implemented executable process. That process will
-read Raw rows, write Created/Curated rows and promotion audit records, and will not mutate
-Raw evidence.
+conversion is a separate executable process. It reads Raw rows, writes Curated rows and
+promotion audit records, and does not mutate Raw evidence.
 
 ### Created data layer
 
@@ -85,6 +90,12 @@ Each identifiable object in this layer has observation metadata:
 - Source provenance: identifies where the data came from, including the BHA source location and the raw record or collection run that produced it.
 
 The stable identity used to match repeat observations must be defined for each object type. Without that identity, `FirstObserved` and `LastObserved` cannot reliably distinguish a new object from an update to an existing one.
+
+The first implementation stores these records in `curated.domain_objects` with source
+system, domain-object type, source key, display name, source URL, Raw payload/run lineage,
+last promotion run, `FirstObserved`, `LastObserved`, and JSONB source data containing the
+found source row. `curated.promotion_runs` records the Raw-to-Curated result and any error
+details for each attempted Raw payload.
 
 ### Audit and lineage
 
@@ -166,4 +177,4 @@ Source-code dependencies must point inwards. Domain must not reference Applicati
 
 ## Current scope
 
-This remains a scaffold. The expanded domain and its PostgreSQL relationships are implemented; [the data dictionary](DATA-DICTIONARY.md) and [generated SQL](sql/DOMAIN-SCHEMA.sql) describe that implementation. The React website foundation is implemented against representative data behind a typed repository. The manual BHA raw collector, immutable Raw payload table, and source-to-Raw audit table are implemented for the reviewed racecourse, fixture/meeting, racecard/race, racehorse, jockey, trainer, owner, result and racing-status source families. Source parsing, Raw-to-Created processing, Created storage and promotion audit/lineage remain planned, as do additional entity/scheduled collectors, domain-projection, live website data, and prediction views. Result promotion, revision history, authentication, operational observability and deployment remain future work. [Project status](PROJECT-STATUS.md) records executed verification gates. Consult [source links](SOURCE-LINKS.md) for research provenance.
+This remains a scaffold. The expanded domain and its PostgreSQL relationships are implemented; [the data dictionary](DATA-DICTIONARY.md) and [generated SQL](sql/DOMAIN-SCHEMA.sql) describe that implementation. The React website foundation is implemented against representative data behind a typed repository. The manual BHA raw collector, immutable Raw payload table, source-to-Raw audit table, Raw-to-Curated promoter, generic Curated domain-object table and promotion audit table are implemented for the reviewed source families. Richer entity-specific parsing/validation, additional entity/scheduled collectors, domain-projection, live website data, and prediction views remain planned. Result promotion, revision history, authentication, operational observability and deployment remain future work. [Project status](PROJECT-STATUS.md) records executed verification gates. Consult [source links](SOURCE-LINKS.md) for research provenance.

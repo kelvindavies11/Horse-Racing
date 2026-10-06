@@ -30,10 +30,10 @@ The current domain foundation models eleven entities: racecourses, meetings, rac
 - [ ] **Source-to-Raw audit**
   - [ ] Record run/job identifier, source/location, start and end timestamps, outcome/status, payload and record counts where meaningful, Raw identifiers, and structured errors.
   - [ ] Record failed and partial attempts even when no Raw payload is produced.
-- [ ] **Raw-to-Created promotion and audit**
+- [x] **Raw-to-Created promotion and audit foundation**
   - [ ] Validate, normalize, map, and upsert by the entity's documented stable identity.
   - [ ] Record outcome, validation/mapping errors, created/updated/unchanged/rejected counts where meaningful, links to all Raw inputs, and affected Created identifiers.
-  - [ ] Preserve the original `FirstObserved`; advance `LastObserved` only after a successful observation and promotion of the same stable identity.
+  - [x] Preserve the original `FirstObserved`; advance `LastObserved` only after a successful observation and promotion of the same stable identity.
   - [ ] Make retries and Raw reprocessing idempotent, while retaining every processing attempt and the parser/mapping version used.
 - [ ] **Local job operation**
   - [ ] Support an explicit manual run for a chosen entity/source/date scope and a configurable local schedule.

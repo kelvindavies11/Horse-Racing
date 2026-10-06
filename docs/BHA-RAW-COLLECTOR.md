@@ -10,9 +10,9 @@ source response and collection result in the PostgreSQL `raw` schema.
 It does **not** parse racecourses, meetings, races, runners, horses, jockeys, results or
 steward reports, create application records, or write to domain tables. Trainer records
 and owner championship rows are also not parsed or promoted. Raw-to-Curated conversion is
-a separate process boundary: a future converter will read immutable `raw.payloads` rows and write validated,
-consistently shaped records to a separate Created/Curated schema. It must record its own
-attempt history and Raw lineage, and must never update a Raw payload in place.
+a separate process boundary: `HorseRacing.Bha.CuratedPromoter` reads immutable
+`raw.payloads` rows and writes consistently shaped records to the `curated` schema. It
+records its own attempt history and Raw lineage, and never updates a Raw payload in place.
 
 ## Source and collection policy
 
