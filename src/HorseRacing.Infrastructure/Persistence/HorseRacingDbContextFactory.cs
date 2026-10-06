@@ -9,7 +9,7 @@ public sealed class HorseRacingDbContextFactory
     public HorseRacingDbContext CreateDbContext(string[] args)
     {
         var connectionString = Environment.GetEnvironmentVariable("HORSE_RACING_CONNECTION_STRING")
-            ?? "Host=localhost;Port=5432;Database=horse_racing;Username=horse_racing;Password=horse_racing_local";
+            ?? "Host=localhost;Port=5433;Database=horse_racing;Username=horse_racing;Password=horse_racing_local";
 
         var options = new DbContextOptionsBuilder<HorseRacingDbContext>()
             .UseNpgsql(connectionString)

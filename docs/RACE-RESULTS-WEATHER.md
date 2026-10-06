@@ -15,7 +15,7 @@ The `HorseRacing.RaceDataSync` console job collects a bounded historical date ra
 Apply migrations and set the API connection string plus the current BHA result bearer token outside source control:
 
 ```powershell
-$env:ConnectionStrings__HorseRacing = 'Host=localhost;Port=5432;Database=horse_racing;Username=horse_racing;Password=horse_racing_local'
+$env:ConnectionStrings__HorseRacing = 'Host=localhost;Port=5433;Database=horse_racing;Username=horse_racing;Password=horse_racing_local'
 $env:BhaCollection__RacingStatusApiBearerToken = '<operator-supplied token>'
 dotnet run --project src/HorseRacing.RaceDataSync -- --from 2026-09-29 --to 2026-10-05
 ```

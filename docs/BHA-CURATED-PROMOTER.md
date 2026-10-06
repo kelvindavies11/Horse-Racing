@@ -69,7 +69,7 @@ Configuration comes from `appsettings.json`, environment variables, or command-l
 configuration. PowerShell environment-variable examples:
 
 ```powershell
-$env:ConnectionStrings__HorseRacing = "Host=localhost;Port=5432;Database=horse_racing;Username=horse_racing;Password=..."
+$env:ConnectionStrings__HorseRacing = "Host=localhost;Port=5433;Database=horse_racing;Username=horse_racing;Password=..."
 $env:BhaCuratedPromotion__BatchSize = "250"
 $env:BhaCuratedPromotion__RetryFailedPayloads = "true"
 dotnet run --project src/HorseRacing.Bha.CuratedPromoter

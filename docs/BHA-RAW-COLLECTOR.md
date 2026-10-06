@@ -184,7 +184,7 @@ configuration. Keep environment-specific connection strings out of source contro
 example:
 
 ```powershell
-$env:ConnectionStrings__HorseRacing = "Host=localhost;Port=5432;Database=horse_racing;Username=horse_racing;Password=..."
+$env:ConnectionStrings__HorseRacing = "Host=localhost;Port=5433;Database=horse_racing;Username=horse_racing;Password=..."
 dotnet run --project src/HorseRacing.Bha.RawCollector
 ```
 

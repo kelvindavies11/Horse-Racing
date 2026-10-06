@@ -100,7 +100,7 @@ The design-time factory reads `HORSE_RACING_CONNECTION_STRING`; the API reads `C
 The schema was exercised on an isolated local PostgreSQL 16 instance; the Compose target remains PostgreSQL 17 and needs a separate compatibility run. [Project status](PROJECT-STATUS.md) contains detailed evidence. Repeat the row/relationship checks on a disposable migrated database with:
 
 ```powershell
-psql -h localhost -U horse_racing -d horse_racing -v ON_ERROR_STOP=1 -f tests/sql/verify-domain.sql
+psql -h localhost -p 5433 -U horse_racing -d horse_racing -v ON_ERROR_STOP=1 -f tests/sql/verify-domain.sql
 ```
 
 The SQL checks use a transaction and roll back all sample data. External design references are recorded in [source links](SOURCE-LINKS.md).
