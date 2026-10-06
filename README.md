@@ -35,6 +35,7 @@ src/
   HorseRacing.Application/     Use cases and persistence abstractions
   HorseRacing.Infrastructure/  EF Core, PostgreSQL, repositories, migrations
   HorseRacing.Bha.RawCollector/ Manual BHA source-to-Raw console job
+  HorseRacing.Bha.CuratedPromoter/ Manual Raw-to-Curated console job
   HorseRacing.Api/             HTTP host and endpoints
   HorseRacing.Web/             React website and typed data-access layer
 tests/
@@ -95,6 +96,18 @@ not convert or promote data. See the
 [BHA Raw collector guide](docs/BHA-RAW-COLLECTOR.md) for policy, token configuration,
 schema, and inspection details.
 
+Promote successful Raw JSON payloads into the Curated layer with:
+
+```powershell
+dotnet run --project src/HorseRacing.Bha.CuratedPromoter
+```
+
+The promoter writes Raw-to-Curated audit rows and typed curated domain-object records to
+the dedicated PostgreSQL `curated` schema. Unsupported raw media is skipped with a
+recorded reason; invalid JSON and mapping failures are retained as promotion errors. See
+the [BHA Curated promoter guide](docs/BHA-CURATED-PROMOTER.md) for configuration and
+inspection details.
+
 Start the website in a second terminal:
 
 ```powershell
@@ -107,7 +120,7 @@ The website defaults to representative fixture data while the Created-layer read
 
 ## Current status
 
-The implementation is **IN PROGRESS**. The domain now covers racecourses, meetings, races, horses, stables, trainers, owners, jockeys, runners and race/runner results, with EF mappings, migration and PostgreSQL SQL. A React website foundation is present with a typed API boundary and representative fallback data. The manual BHA raw collector, immutable Raw payload storage, and source-to-Raw audit are implemented for the reviewed racecourse, fixture/meeting, racecard/race, racehorse, jockey, trainer, owner, result and racing-status source families. Raw-to-Created conversion, entity parsing, additional entity/scheduled collection jobs, the Created layer, domain-projection job, live read endpoints, and future prediction views remain planned. See [Project status](docs/PROJECT-STATUS.md) for actual verification evidence and remaining gaps.
+The implementation is **IN PROGRESS**. The domain now covers racecourses, meetings, races, horses, stables, trainers, owners, jockeys, runners and race/runner results, with EF mappings, migration and PostgreSQL SQL. A React website foundation is present with a typed API boundary and representative fallback data. The manual BHA raw collector, immutable Raw payload storage, source-to-Raw audit, Raw-to-Curated promoter, Curated promotion audit, and generic curated domain-object storage are implemented for the reviewed source families. Entity-specific validation, richer per-entity parsers, additional entity/scheduled collection jobs, domain-projection job, live read endpoints, and future prediction views remain planned. See [Project status](docs/PROJECT-STATUS.md) for actual verification evidence and remaining gaps.
 
 The [domain dictionary](docs/DOMAIN-MODEL.md) explains entities and relationships; the [data dictionary](docs/DATA-DICTIONARY.md) records physical columns and constraints. External references are in [source links](docs/SOURCE-LINKS.md), and planned delivery is in the [feature backlog](docs/FEATURES.md).
 

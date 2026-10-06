@@ -1,4 +1,5 @@
 using HorseRacing.Domain.Entities;
+using HorseRacing.Infrastructure.Ingestion.Curated;
 using HorseRacing.Infrastructure.Ingestion.Raw;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,6 +11,10 @@ public sealed class HorseRacingDbContext(DbContextOptions<HorseRacingDbContext> 
     public DbSet<RawCollectionRun> RawCollectionRuns => Set<RawCollectionRun>();
 
     public DbSet<RawPayload> RawPayloads => Set<RawPayload>();
+
+    public DbSet<CuratedPromotionRun> CuratedPromotionRuns => Set<CuratedPromotionRun>();
+
+    public DbSet<CuratedDomainObject> CuratedDomainObjects => Set<CuratedDomainObject>();
 
     public DbSet<Horse> Horses => Set<Horse>();
 

@@ -663,3 +663,135 @@ BEGIN
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261005181610_AddCuratedPromotion') THEN
+        IF NOT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname = 'curated') THEN
+            CREATE SCHEMA curated;
+        END IF;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261005181610_AddCuratedPromotion') THEN
+    CREATE TABLE curated.promotion_runs (
+        id uuid NOT NULL,
+        job_name character varying(100) NOT NULL,
+        promoter_version character varying(50) NOT NULL,
+        raw_payload_id uuid NOT NULL,
+        raw_collection_run_id uuid NOT NULL,
+        source_job_name character varying(100) NOT NULL,
+        source_name character varying(200) NOT NULL,
+        source_url character varying(2048) NOT NULL,
+        payload_sha256 character(64) NOT NULL,
+        started_at_utc timestamp with time zone NOT NULL,
+        completed_at_utc timestamp with time zone,
+        outcome character varying(20) NOT NULL,
+        records_found integer NOT NULL,
+        records_upserted integer NOT NULL,
+        error_code character varying(100),
+        error_message character varying(2000),
+        CONSTRAINT "PK_promotion_runs" PRIMARY KEY (id),
+        CONSTRAINT ck_curated_promotion_runs_completion CHECK ((outcome = 'Running' AND completed_at_utc IS NULL) OR (outcome <> 'Running' AND completed_at_utc IS NOT NULL)),
+        CONSTRAINT ck_curated_promotion_runs_outcome CHECK (outcome IN ('Running', 'Succeeded', 'Skipped', 'Failed', 'Cancelled')),
+        CONSTRAINT ck_curated_promotion_runs_record_counts CHECK (records_found >= 0 AND records_upserted >= 0),
+        CONSTRAINT fk_curated_promotion_runs_raw_collection_runs_raw_collection_run_id FOREIGN KEY (raw_collection_run_id) REFERENCES raw.collection_runs (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_curated_promotion_runs_raw_payloads_raw_payload_id FOREIGN KEY (raw_payload_id) REFERENCES raw.payloads (id) ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261005181610_AddCuratedPromotion') THEN
+    CREATE TABLE curated.domain_objects (
+        id uuid NOT NULL,
+        source_system character varying(50) NOT NULL,
+        domain_object_type character varying(100) NOT NULL,
+        source_key character varying(300) NOT NULL,
+        display_name character varying(500) NOT NULL,
+        source_url character varying(2048) NOT NULL,
+        raw_payload_id uuid NOT NULL,
+        raw_collection_run_id uuid NOT NULL,
+        last_promotion_run_id uuid NOT NULL,
+        source_data jsonb NOT NULL,
+        first_observed_at_utc timestamp with time zone NOT NULL,
+        last_observed_at_utc timestamp with time zone NOT NULL,
+        CONSTRAINT "PK_domain_objects" PRIMARY KEY (id),
+        CONSTRAINT ck_curated_domain_objects_observation_dates CHECK (last_observed_at_utc >= first_observed_at_utc),
+        CONSTRAINT ck_curated_domain_objects_source_data_json CHECK (jsonb_typeof(source_data) = 'object'),
+        CONSTRAINT fk_curated_domain_objects_promotion_runs_last_promotion_run_id FOREIGN KEY (last_promotion_run_id) REFERENCES curated.promotion_runs (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_curated_domain_objects_raw_collection_runs_raw_collection_run_id FOREIGN KEY (raw_collection_run_id) REFERENCES raw.collection_runs (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_curated_domain_objects_raw_payloads_raw_payload_id FOREIGN KEY (raw_payload_id) REFERENCES raw.payloads (id) ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261005181610_AddCuratedPromotion') THEN
+    CREATE INDEX ix_curated_domain_objects_last_promotion_run_id ON curated.domain_objects (last_promotion_run_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261005181610_AddCuratedPromotion') THEN
+    CREATE INDEX ix_curated_domain_objects_raw_collection_run_id ON curated.domain_objects (raw_collection_run_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261005181610_AddCuratedPromotion') THEN
+    CREATE INDEX ix_curated_domain_objects_raw_payload_id ON curated.domain_objects (raw_payload_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261005181610_AddCuratedPromotion') THEN
+    CREATE INDEX ix_curated_domain_objects_type_display_name ON curated.domain_objects (domain_object_type, display_name);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261005181610_AddCuratedPromotion') THEN
+    CREATE UNIQUE INDEX ux_curated_domain_objects_source_identity ON curated.domain_objects (source_system, domain_object_type, source_key);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261005181610_AddCuratedPromotion') THEN
+    CREATE INDEX ix_curated_promotion_runs_raw_collection_run_id ON curated.promotion_runs (raw_collection_run_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261005181610_AddCuratedPromotion') THEN
+    CREATE INDEX ix_curated_promotion_runs_raw_payload_outcome ON curated.promotion_runs (raw_payload_id, outcome);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261005181610_AddCuratedPromotion') THEN
+    CREATE INDEX ix_curated_promotion_runs_source_job_started ON curated.promotion_runs (source_job_name, started_at_utc);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261005181610_AddCuratedPromotion') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20261005181610_AddCuratedPromotion', '10.0.12');
+    END IF;
+END $EF$;
+COMMIT;
+

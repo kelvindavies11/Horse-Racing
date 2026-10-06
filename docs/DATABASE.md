@@ -58,14 +58,16 @@ Raw ingestion and raw-to-created promotion both require audit records. A created
 All eleven domain tables use the default `public` schema. The `AddRawIngestion` migration
 adds `raw.collection_runs` and `raw.payloads`: the former records source-to-Raw results and
 errors, while the latter stores immutable response bytes, source/HTTP metadata and a
-SHA-256 hash. The tables and constraints are documented in the
+SHA-256 hash. The `AddCuratedPromotion` migration adds `curated.promotion_runs` and
+`curated.domain_objects`: the former records Raw-to-Curated results and errors, while the
+latter stores typed source-object records with Raw lineage, `FirstObserved`,
+`LastObserved`, and JSONB source data. The tables and constraints are documented in the
 [data dictionary](DATA-DICTIONARY.md); operating instructions are in the
-[BHA Raw collector guide](BHA-RAW-COLLECTOR.md).
+[BHA Raw collector guide](BHA-RAW-COLLECTOR.md) and
+[BHA Curated promoter guide](BHA-CURATED-PROMOTER.md).
 
-Created/Curated tables, promotion audit, and source-identity mapping are not implemented.
-They must be owned by a separate Raw-to-Curated process that reads Raw records without
-modifying them. Domain persistence remains a later projection target rather than the Raw
-collector's output.
+Domain persistence remains a later projection target rather than the Raw collector's or
+Curated promoter's direct output.
 
 Prediction persistence is intentionally left open until the future prediction process and its outputs are defined. Prediction results will be served to the React website through the local API rather than read directly from storage.
 

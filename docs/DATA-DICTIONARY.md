@@ -1,10 +1,11 @@
 # PostgreSQL data dictionary
 
-Updated: 5 October 2026. This is the implemented domain and Raw schema after
-`InitialCreate`, `ExpandRacingDomain`, and `AddRawIngestion`. See
+Updated: 6 October 2026. This is the implemented domain, Raw and Curated schema after
+`InitialCreate`, `ExpandRacingDomain`, `AddRawIngestion`, and `AddCuratedPromotion`. See
 [domain definitions and relationship diagram](DOMAIN-MODEL.md),
 [migration instructions](DATABASE.md), [Raw collector guidance](BHA-RAW-COLLECTOR.md),
-[source register](SOURCE-LINKS.md) and [generated PostgreSQL SQL](sql/DOMAIN-SCHEMA.sql).
+[Curated promoter guidance](BHA-CURATED-PROMOTER.md), [source register](SOURCE-LINKS.md)
+and [generated PostgreSQL SQL](sql/DOMAIN-SCHEMA.sql).
 
 ## Conventions
 
@@ -12,8 +13,9 @@ All eleven domain tables have `id uuid NOT NULL` as their primary key, generated
 
 Domain tables use the connection's default PostgreSQL schema (`public` in the supplied
 configuration). Raw source responses and source-to-Raw audit use the dedicated `raw`
-schema. Created/Curated, promotion-audit, source-identity mapping and prediction tables are
-not implemented. `__EFMigrationsHistory` is EF infrastructure, not a racing entity.
+schema. Raw-to-Curated promotion audit and generic curated source-object records use the
+dedicated `curated` schema. Prediction tables are not implemented.
+`__EFMigrationsHistory` is EF infrastructure, not a racing entity.
 
 ## Raw ingestion tables
 
@@ -59,6 +61,56 @@ Each collection run has at most one payload. HTTP error bodies are evidence and 
 network failures have an audit row but no invented payload. CHECK constraints validate the
 HTTP status range, hash shape, and equality of `content_length` to the stored byte count.
 The application has no Raw update or delete use case.
+
+## Curated promotion tables
+
+### curated.promotion_runs — Raw-to-Curated audit
+
+| Column | PostgreSQL type | Required | Meaning |
+| --- | --- | --- | --- |
+| id | uuid | Yes | Application-generated promotion-run identity / PK |
+| job_name | varchar(100) | Yes | Stable local promotion job name |
+| promoter_version | varchar(50) | Yes | Promoter/parser contract version |
+| raw_payload_id | uuid | Yes | FK → raw.payloads |
+| raw_collection_run_id | uuid | Yes | FK → raw.collection_runs |
+| source_job_name | varchar(100) | Yes | Raw collector job name that produced the payload |
+| source_name | varchar(200) | Yes | Human-readable source description |
+| source_url | varchar(2048) | Yes | Requested BHA source location |
+| payload_sha256 | char(64) | Yes | Lowercase SHA-256 copied from the Raw payload |
+| started_at_utc | timestamptz | Yes | Attempt start time |
+| completed_at_utc | timestamptz | No | Completion time; null only while Running |
+| outcome | varchar(20) | Yes | Running, Succeeded, Skipped, Failed, or Cancelled |
+| records_found | integer | Yes | Count of source rows identified by the promoter |
+| records_upserted | integer | Yes | Count of Curated records inserted or refreshed |
+| error_code | varchar(100) | No | Structured skip/failure classification |
+| error_message | varchar(2000) | No | Bounded diagnostic detail with no secrets |
+
+Indexes `(raw_payload_id, outcome)` and `(source_job_name, started_at_utc)` support replay
+selection and source history. CHECK constraints restrict outcomes, require completion
+timestamps for terminal results, and keep record counts nonnegative.
+
+### curated.domain_objects — typed Curated source objects
+
+| Column | PostgreSQL type | Required | Meaning |
+| --- | --- | --- | --- |
+| id | uuid | Yes | Application-generated Curated record identity / PK |
+| source_system | varchar(50) | Yes | Source system, currently `BHA` |
+| domain_object_type | varchar(100) | Yes | Typed object classification such as Racecourse, Horse, Jockey, Trainer, Owner, Meeting, Race, Runner, RaceResult, RaceGoing or StewardReport |
+| source_key | varchar(300) | Yes | Stable key extracted from the source row, or a bounded content hash fallback |
+| display_name | varchar(500) | Yes | Human-readable label extracted from the source row |
+| source_url | varchar(2048) | Yes | BHA source location that supplied the latest observation |
+| raw_payload_id | uuid | Yes | Latest-observation FK → raw.payloads |
+| raw_collection_run_id | uuid | Yes | Latest-observation FK → raw.collection_runs |
+| last_promotion_run_id | uuid | Yes | Latest-observation FK → curated.promotion_runs |
+| source_data | jsonb | Yes | JSON object containing extracted identity fields and the found source row |
+| first_observed_at_utc | timestamptz | Yes | First successful Curated observation time for this source identity |
+| last_observed_at_utc | timestamptz | Yes | Most recent successful Curated observation time for this source identity |
+
+Unique `(source_system, domain_object_type, source_key)` is the Curated upsert identity.
+`FirstObserved` is retained from the original insert. `LastObserved`, lineage and
+`source_data` refresh when the same source object is seen again in a supported Raw payload.
+CHECK constraints require `source_data` to be a JSON object and prevent the last
+observation timestamp from preceding the first.
 
 ## Reference and connection tables
 
@@ -227,9 +279,14 @@ Composite FKs `(race_result_id, race_id) → race_results(id, race_id)` and `(ru
 | race_results.race_id | races.id | 1 → zero/one current result | CASCADE |
 | runner_results.(race_result_id, race_id) | race_results.(id, race_id) | 1 → many outcomes | CASCADE |
 | runner_results.(runner_id, race_id) | runners.(id, race_id) | 1 → zero/one outcome | RESTRICT |
+| curated.promotion_runs.raw_payload_id | raw.payloads.id | 1 Raw payload → many promotion attempts | RESTRICT |
+| curated.promotion_runs.raw_collection_run_id | raw.collection_runs.id | 1 Raw collection run → many promotion attempts | RESTRICT |
+| curated.domain_objects.raw_payload_id | raw.payloads.id | 1 latest Raw payload → many Curated objects | RESTRICT |
+| curated.domain_objects.raw_collection_run_id | raw.collection_runs.id | 1 latest Raw collection run → many Curated objects | RESTRICT |
+| curated.domain_objects.last_promotion_run_id | curated.promotion_runs.id | 1 promotion run → many latest Curated objects | RESTRICT |
 
 Reference records cannot be deleted while referenced. There is no general delete use case: runners with results are protected, so a future aggregate deletion workflow must explicitly remove result dependants before runners. Prefer retaining historical racing records. Rollback of this schema removes expanded data; see the migration guidance.
 
 ## Synchronisation rule
 
-For a domain change, update entity code, EF configuration, migration/snapshot, this dictionary and the domain dictionary together. Regenerate `docs/sql/DOMAIN-SCHEMA.sql` from EF migrations, then run the [SQL relationship checks](../tests/sql/verify-domain.sql). Do not hand-edit the generated SQL independently of its migrations.
+For a domain or persistence change, update entity code, EF configuration, migration/snapshot, this dictionary and any affected domain or ingestion documentation together. Regenerate `docs/sql/DOMAIN-SCHEMA.sql` from EF migrations, then run the relevant SQL relationship checks where practical. Do not hand-edit the generated SQL independently of its migrations.
