@@ -1,39 +1,173 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { vi } from "vitest";
 import App from "./App";
+import type {
+  AuditSnapshot,
+  CuratedEntity,
+  CuratedEntityPage,
+  CuratedOverview,
+  RelationshipGraph,
+} from "./domain/curated";
 
-describe("racing dashboard", () => {
-  it("renders the race-day summary from the repository", async () => {
-    render(<App />);
+const entities: CuratedEntity[] = [
+  {
+    id: "11111111-1111-1111-1111-111111111111",
+    sourceSystem: "BHA",
+    domainObjectType: "Racecourse",
+    sourceKey: "ASC",
+    displayName: "Ascot",
+    sourceUrl: "https://www.britishhorseracing.com/racing/racecourses/ascot/",
+    rawPayloadId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+    rawCollectionRunId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+    lastPromotionRunId: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+    firstObservedAtUtc: "2026-10-05T09:00:00Z",
+    lastObservedAtUtc: "2026-10-06T08:00:00Z",
+    data: { courseCode: "ASC", courseName: "Ascot", country: "GB" },
+  },
+  {
+    id: "22222222-2222-2222-2222-222222222222",
+    sourceSystem: "BHA",
+    domainObjectType: "Horse",
+    sourceKey: "HORSE-7",
+    displayName: "Northern Signal",
+    sourceUrl: "https://www.britishhorseracing.com/racing/horses/",
+    rawPayloadId: "dddddddd-dddd-dddd-dddd-dddddddddddd",
+    rawCollectionRunId: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+    lastPromotionRunId: "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    firstObservedAtUtc: "2026-10-05T10:00:00Z",
+    lastObservedAtUtc: "2026-10-06T08:30:00Z",
+    data: { horseId: "HORSE-7", horseName: "Northern Signal", trainerId: "TRAINER-2" },
+  },
+];
 
-    expect(await screen.findByRole("heading", { name: "Today’s meetings" })).toBeInTheDocument();
-    expect(screen.getByText("Demo data")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Ascot" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Race schedule" })).toBeInTheDocument();
-  });
+const overview: CuratedOverview = {
+  generatedAtUtc: "2026-10-06T09:00:00Z",
+  totalEntities: 2,
+  totalEntityTypes: 2,
+  firstObservedAtUtc: "2026-10-05T09:00:00Z",
+  lastObservedAtUtc: "2026-10-06T08:30:00Z",
+  entityTypes: [
+    { type: "Horse", count: 1, lastObservedAtUtc: "2026-10-06T08:30:00Z" },
+    { type: "Racecourse", count: 1, lastObservedAtUtc: "2026-10-06T08:00:00Z" },
+  ],
+};
 
-  it("filters meetings by code without fetching in a component", async () => {
-    const user = userEvent.setup();
-    render(<App />);
-    await screen.findByRole("heading", { name: "Today’s meetings" });
+const relationships: RelationshipGraph = {
+  generatedAtUtc: "2026-10-06T09:00:00Z",
+  nodes: [
+    { id: entities[1].id, type: "Horse", displayName: "Northern Signal", lastObservedAtUtc: "2026-10-06T08:30:00Z" },
+    { id: "33333333-3333-3333-3333-333333333333", type: "Trainer", displayName: "Jane Rider", lastObservedAtUtc: "2026-10-06T08:30:00Z" },
+  ],
+  edges: [{ sourceId: entities[1].id, targetId: "33333333-3333-3333-3333-333333333333", label: "trainer id" }],
+  patterns: [{ sourceType: "Horse", targetType: "Trainer", count: 1 }],
+};
 
-    await user.click(screen.getByRole("button", { name: "Jump" }));
+const audit: AuditSnapshot = {
+  generatedAtUtc: "2026-10-06T09:00:00Z",
+  summary: {
+    totalRawRuns: 12,
+    failedRawRuns: 1,
+    totalPromotionRuns: 10,
+    failedPromotionRuns: 0,
+    lastRawRunAtUtc: "2026-10-06T08:00:00Z",
+    lastPromotionRunAtUtc: "2026-10-06T08:05:00Z",
+  },
+  rawRuns: [{
+    id: "raw-1",
+    jobName: "bha-racecourses",
+    sourceName: "BHA racecourses",
+    sourceUrl: "https://example.test/raw",
+    collectorVersion: "1.0.0",
+    startedAtUtc: "2026-10-06T08:00:00Z",
+    completedAtUtc: "2026-10-06T08:00:02Z",
+    outcome: "Succeeded",
+    httpStatusCode: 200,
+    payloadId: "payload-1",
+    payloadBytes: 2048,
+    mediaType: "application/json",
+  }],
+  promotionRuns: [{
+    id: "promotion-1",
+    jobName: "bha-curated-promoter",
+    sourceJobName: "bha-racecourses",
+    sourceName: "BHA racecourses",
+    sourceUrl: "https://example.test/raw",
+    promoterVersion: "1.0.0",
+    rawPayloadId: "payload-1",
+    rawCollectionRunId: "raw-1",
+    startedAtUtc: "2026-10-06T08:05:00Z",
+    completedAtUtc: "2026-10-06T08:05:01Z",
+    outcome: "Succeeded",
+    recordsFound: 2,
+    recordsUpserted: 2,
+  }],
+};
 
-    const cards = screen.getAllByTestId("meeting-card");
-    expect(cards).toHaveLength(1);
-    expect(within(cards[0]).getByRole("heading", { name: "Stratford" })).toBeInTheDocument();
-  });
+const json = (value: unknown) => Promise.resolve(new Response(JSON.stringify(value), { status: 200, headers: { "Content-Type": "application/json" } }));
 
-  it("supports course search and an empty-state reset", async () => {
-    const user = userEvent.setup();
-    render(<App />);
-    await screen.findByRole("heading", { name: "Today’s meetings" });
-
-    await user.type(screen.getByPlaceholderText("Search racecourse"), "not a real course");
-    expect(screen.getByRole("heading", { name: "No meetings match those filters" })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Clear filters" }));
-    expect(screen.getAllByTestId("meeting-card")).toHaveLength(4);
-  });
+beforeEach(() => {
+  window.history.replaceState(null, "", "#explore");
+  vi.stubGlobal("scrollTo", vi.fn());
+  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+    const url = new URL(typeof input === "string" ? input : input.toString(), "http://localhost");
+    if (url.pathname.endsWith("/curated/overview")) return json(overview);
+    if (url.pathname.endsWith("/curated/relationships")) return json(relationships);
+    if (url.pathname.endsWith("/admin/audit")) return json(audit);
+    if (url.pathname.endsWith("/curated/entities")) {
+      const type = url.searchParams.get("type");
+      const search = url.searchParams.get("search")?.toLowerCase();
+      const matches = entities.filter((entity) => (!type || entity.domainObjectType === type) && (!search || entity.displayName.toLowerCase().includes(search)));
+      const page: CuratedEntityPage = { generatedAtUtc: overview.generatedAtUtc, page: 1, pageSize: 60, totalCount: matches.length, totalPages: matches.length ? 1 : 0, items: matches };
+      return json(page);
+    }
+    return Promise.resolve(new Response(null, { status: 404 }));
+  }));
 });
 
+afterEach(() => vi.unstubAllGlobals());
+
+describe("curated data workspace", () => {
+  it("renders only curated API entities and collection metrics", async () => {
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Observed records" })).toBeInTheDocument();
+    expect(screen.getAllByText("Ascot").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Northern Signal").length).toBeGreaterThan(0);
+    expect(screen.getByText("No mock or fallback records")).toBeInTheDocument();
+  });
+
+  it("filters the entity directory by curated type", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole("heading", { name: "Observed records" });
+    await user.click(screen.getByRole("button", { name: "Horse1" }));
+    await waitFor(() => expect(screen.getAllByTestId("entity-card")).toHaveLength(1));
+    expect(within(screen.getByTestId("entity-card")).getAllByText("Northern Signal").length).toBeGreaterThan(0);
+  });
+
+  it("opens source provenance and lineage for a curated record", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole("heading", { name: "Observed records" });
+    await user.click(screen.getAllByTestId("entity-card")[0]);
+    const dialog = screen.getByRole("dialog", { name: "Ascot details" });
+    expect(within(dialog).getByText("Observation & lineage")).toBeInTheDocument();
+    expect(within(dialog).getByText("Raw payload")).toBeInTheDocument();
+    expect(within(dialog).getByRole("link", { name: /Original source/i })).toHaveAttribute("href", entities[0].sourceUrl);
+  });
+
+  it("shows inferred patterns and the admin job audit", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole("heading", { name: "Observed records" });
+    await user.click(screen.getByRole("button", { name: /Patterns/i }));
+    expect(await screen.findByRole("heading", { name: "Families that travel together" })).toBeInTheDocument();
+    expect(screen.getAllByText("Jane Rider").length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole("button", { name: /Admin audit/i }));
+    expect(await screen.findByRole("heading", { name: "Latest job activity" })).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Raw collection runs" })).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /Curated promotion/i }));
+    expect(screen.getByRole("table", { name: "Curated promotion runs" })).toBeInTheDocument();
+  });
+});

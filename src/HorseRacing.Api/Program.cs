@@ -1,4 +1,5 @@
 using HorseRacing.Application.Races.CreateRace;
+using HorseRacing.Api;
 using HorseRacing.Domain.Enums;
 using HorseRacing.Infrastructure;
 
@@ -12,6 +13,8 @@ var app = builder.Build();
 app.UseHttpsRedirection();
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+
+app.MapCuratedReadEndpoints();
 
 app.MapPost(
     "/api/races",

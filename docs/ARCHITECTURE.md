@@ -162,14 +162,14 @@ HorseRacing.Application
 
 - Is the application composition root.
 - Hosts HTTP endpoints and maps transport requests to Application commands.
-- Will provide the created-data read endpoints used by the local React website.
+- Provides versioned Curated read endpoints and a read-only Raw/Curated audit endpoint used by the local React website.
 - Does not contain persistence rules.
 
 ### Web
 
 - Is a conventional React and TypeScript frontend hosted locally.
-- Reads application data through a typed repository boundary rather than accessing storage directly. It currently uses representative fixtures because the Created-layer read endpoint is not implemented; `api` and API-with-fallback modes are configuration-only changes.
-- Provides the initial responsive race-day overview, meeting filters, search, schedule, and loading/empty/error states. Prediction views remain future work.
+- Reads application data through a typed repository boundary rather than accessing storage directly. It has no fixture or fallback data mode: an unavailable API produces an explicit error state.
+- Provides responsive Curated type summaries, search, type filtering, bounded pagination, record/lineage inspection, inferred reference-pattern exploration and a read-only Raw/Curated job audit. Prediction views remain future work.
 
 ## Dependency rule
 
@@ -177,4 +177,4 @@ Source-code dependencies must point inwards. Domain must not reference Applicati
 
 ## Current scope
 
-This remains a scaffold. The expanded domain and its PostgreSQL relationships are implemented; [the data dictionary](DATA-DICTIONARY.md) and [generated SQL](sql/DOMAIN-SCHEMA.sql) describe that implementation. The React website foundation is implemented against representative data behind a typed repository. The manual BHA raw collector, immutable Raw payload table, source-to-Raw audit table, Raw-to-Curated promoter, generic Curated domain-object table and promotion audit table are implemented for the reviewed source families. Richer entity-specific parsing/validation, additional entity/scheduled collectors, domain-projection, live website data, and prediction views remain planned. Result promotion, revision history, authentication, operational observability and deployment remain future work. [Project status](PROJECT-STATUS.md) records executed verification gates. Consult [source links](SOURCE-LINKS.md) for research provenance.
+This remains an in-progress system. The expanded domain and its PostgreSQL relationships are implemented; [the data dictionary](DATA-DICTIONARY.md) and [generated SQL](sql/DOMAIN-SCHEMA.sql) describe that implementation. Generic Curated API contracts and the API-only React inspection workspace are implemented through an Application read port backed by Infrastructure. The manual BHA raw collector, immutable Raw payload table, source-to-Raw audit table, Raw-to-Curated promoter, generic Curated domain-object table and promotion audit table are implemented for the reviewed source families. Richer entity-specific parsing, validation and read contracts, additional scheduled collectors, domain projection and prediction views remain planned. Result promotion, revision history, authentication, operational observability and deployment remain future work. [Project status](PROJECT-STATUS.md) records executed verification gates. Consult [source links](SOURCE-LINKS.md) for research provenance.

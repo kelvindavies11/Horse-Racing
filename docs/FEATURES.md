@@ -9,7 +9,7 @@ The current domain foundation models eleven entities: racecourses, meetings, rac
 - [ ] Deliver BHA ingestion as end-to-end entity slices, rather than completing one large scraper before any entity is usable.
 - [ ] Make every successful Created layer record traceable to an immutable Raw input, collection run, and BHA source location.
 - [ ] Define a repeatable stable identity for each entity before using `FirstObserved` and `LastObserved`.
-- [ ] Keep the React website behind the API; it must not read persistence directly or scrape BHA.
+- [x] Keep the React website behind the API; it must not read persistence directly or scrape BHA.
 - [ ] Treat failures as audit evidence, not observations: a failed scrape or promotion must not advance `LastObserved`.
 - [ ] Keep collection local-first, repeatable, polite to the source, and safe to reprocess.
 
@@ -53,21 +53,21 @@ The current domain foundation models eleven entities: racecourses, meetings, rac
 - [ ] **Created layer read API**
   - [ ] Provide versioned list and detail contracts for each delivered entity slice.
   - [ ] Support bounded pagination, stable sorting, useful entity-specific filters, and clear validation/error responses.
-  - [ ] Expose Created identifiers, relationships, source provenance, `FirstObserved`, `LastObserved`, and audit/Raw references suitable for local inspection.
-  - [ ] Prevent transport models from leaking persistence internals or Raw payload contents by default.
+  - [x] Expose Created identifiers, inferred relationships, source provenance, `FirstObserved`, `LastObserved`, and audit/Raw references suitable for local inspection.
+  - [x] Prevent transport models from leaking persistence internals or Raw payload contents by default.
 - [ ] **Boilerplate React website**
-  - [ ] Create a locally runnable React application with routing, API client configuration, shared layout/navigation, and loading, empty, and error states.
-  - [ ] Add a reusable browse page and record detail/lineage view driven only by the Created layer API.
+  - [x] Create a locally runnable React application with routing, API client configuration, shared layout/navigation, and loading, empty, and error states.
+  - [x] Add a reusable browse page and record detail/lineage view driven only by the Created layer API.
   - [ ] Add filter, sort, and pagination controls that preserve state in the URL where practical.
-  - [ ] Configure local API origin/CORS safely, with no credentials or environment secrets bundled into the client.
-  - [ ] Establish accessible semantic markup, keyboard operation, and a responsive baseline for later features.
+  - [x] Configure the local API proxy safely, with no credentials or environment secrets bundled into the client.
+  - [x] Establish accessible semantic markup, keyboard operation, and a responsive baseline for later features.
 - [ ] **API and UI diagnostics**
-  - [ ] Show data freshness and last successful collection/promotion status without presenting failed runs as fresh observations.
+  - [x] Show data freshness and collection/promotion audit status without presenting failed runs as fresh observations.
   - [ ] Provide a local inspection route from a displayed Created record to its lineage and validation history, while keeping full Raw payload access an explicit diagnostic action.
 
 ### Epic acceptance criteria
 
-- [ ] A developer can start the API and website locally using documented configuration and browse at least the first completed entity slice.
+- [x] A developer can start the API and website locally using documented configuration and browse Curated entities.
 - [ ] List filters, pagination, detail data, freshness, and lineage are consistent between API responses and the UI.
 - [ ] API contract tests and React component/integration tests cover the happy path plus loading, empty, validation, and server-error states.
 

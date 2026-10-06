@@ -116,11 +116,11 @@ npm install
 npm run dev
 ```
 
-The website defaults to representative fixture data while the Created-layer read API is pending. Data mode, the future API contract, and frontend quality gates are documented in [the web README](src/HorseRacing.Web/README.md).
+The website reads Curated-layer data through the local API only. It provides entity browsing, provenance inspection, inferred relationship patterns and a read-only Raw/Curated job audit. Endpoint configuration and frontend quality gates are documented in [the web README](src/HorseRacing.Web/README.md).
 
 ## Current status
 
-The implementation is **IN PROGRESS**. The domain now covers racecourses, meetings, races, horses, stables, trainers, owners, jockeys, runners and race/runner results, with EF mappings, migration and PostgreSQL SQL. A React website foundation is present with a typed API boundary and representative fallback data. The manual BHA raw collector, immutable Raw payload storage, source-to-Raw audit, Raw-to-Curated promoter, Curated promotion audit, and generic curated domain-object storage are implemented for the reviewed source families. Entity-specific validation, richer per-entity parsers, additional entity/scheduled collection jobs, domain-projection job, live read endpoints, and future prediction views remain planned. See [Project status](docs/PROJECT-STATUS.md) for actual verification evidence and remaining gaps.
+The implementation is **IN PROGRESS**. The domain now covers racecourses, meetings, races, horses, stables, trainers, owners, jockeys, runners and race/runner results, with EF mappings, migration and PostgreSQL SQL. The Curated read API and responsive React workspace provide live generic entity browsing, lineage inspection, inferred reference patterns and Raw/Curated job auditing without exposing Raw payload content. The manual BHA raw collector, immutable Raw payload storage, Raw-to-Curated promoter and both audit layers are implemented for the reviewed source families. Entity-specific validation, richer per-entity contracts and parsers, additional scheduled collection jobs, domain projection and future prediction views remain planned. See [Project status](docs/PROJECT-STATUS.md) for actual verification evidence and remaining gaps.
 
 The [domain dictionary](docs/DOMAIN-MODEL.md) explains entities and relationships; the [data dictionary](docs/DATA-DICTIONARY.md) records physical columns and constraints. External references are in [source links](docs/SOURCE-LINKS.md), and planned delivery is in the [feature backlog](docs/FEATURES.md).
 

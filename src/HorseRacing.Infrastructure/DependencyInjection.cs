@@ -1,4 +1,5 @@
 using HorseRacing.Application.Abstractions;
+using HorseRacing.Application.Browsing;
 using HorseRacing.Infrastructure.Persistence;
 using HorseRacing.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -24,6 +25,7 @@ public static class DependencyInjection
             options.UseNpgsql(connectionString));
 
         services.AddScoped<IRaceRepository, RaceRepository>();
+        services.AddScoped<ICuratedReadRepository, CuratedReadRepository>();
 
         return services;
     }

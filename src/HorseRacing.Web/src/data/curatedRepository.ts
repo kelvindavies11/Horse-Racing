@@ -1,0 +1,49 @@
+import type {
+  AuditSnapshot,
+  CuratedEntityPage,
+  CuratedOverview,
+  RelationshipGraph,
+} from "../domain/curated";
+
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/api").replace(/\/$/, "");
+
+export class CuratedApiError extends Error {
+  constructor(message: string, readonly status?: number) {
+    super(message);
+    this.name = "CuratedApiError";
+  }
+}
+
+const readJson = async <T>(path: string, signal?: AbortSignal): Promise<T> => {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: { Accept: "application/json" },
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new CuratedApiError(`The curated API returned ${response.status}.`, response.status);
+  }
+
+  return (await response.json()) as T;
+};
+
+export const curatedRepository = {
+  getOverview(signal?: AbortSignal) {
+    return readJson<CuratedOverview>("/v1/curated/overview", signal);
+  },
+
+  getEntities(type: string, search: string, page: number, signal?: AbortSignal) {
+    const parameters = new URLSearchParams({ page: String(page), pageSize: "60" });
+    if (type) parameters.set("type", type);
+    if (search.trim()) parameters.set("search", search.trim());
+    return readJson<CuratedEntityPage>(`/v1/curated/entities?${parameters}`, signal);
+  },
+
+  getRelationships(signal?: AbortSignal) {
+    return readJson<RelationshipGraph>("/v1/curated/relationships?limit=500", signal);
+  },
+
+  getAudit(signal?: AbortSignal) {
+    return readJson<AuditSnapshot>("/v1/admin/audit?limit=100", signal);
+  },
+};
