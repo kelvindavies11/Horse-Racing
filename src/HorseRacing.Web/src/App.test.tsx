@@ -319,7 +319,11 @@ describe("curated data workspace", () => {
 
     expect(await screen.findByRole("heading", { name: "October 2026" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Nottingham.*2 races/i }));
-    const meeting = await screen.findByTestId("calendar-meeting-detail");
+    const dialog = screen.getByRole("dialog", { name: "Nottingham meeting details" });
+    expect(dialog).toHaveClass("calendar-meeting-modal");
+    expect(dialog).toHaveAttribute("data-testid", "calendar-meeting-modal");
+    expect(within(dialog).getByText("Meeting atlas")).toBeInTheDocument();
+    const meeting = within(dialog).getByTestId("calendar-meeting-detail");
     expect(within(meeting).getByRole("tablist", { name: "Nottingham races" })).toBeInTheDocument();
 
     await user.click(within(meeting).getByRole("tab", { name: /14:00.*Trent Fillies Handicap/i }));
@@ -328,5 +332,7 @@ describe("curated data workspace", () => {
     expect(within(meeting).getByText("Trainer · Archie Watson")).toBeInTheDocument();
     expect(within(meeting).getByText("Owner · Apple Tree Stud")).toBeInTheDocument();
     expect(within(meeting).getByText("18.1°")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Close meeting details" }));
+    expect(screen.queryByRole("dialog", { name: "Nottingham meeting details" })).not.toBeInTheDocument();
   });
 });

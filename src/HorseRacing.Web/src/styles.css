@@ -404,6 +404,27 @@ svg { width: 1.15rem; height: 1.15rem; flex: 0 0 auto; }
 .calendar-meeting strong { overflow: hidden; font: 600 .82rem/1.1 var(--serif); text-overflow: ellipsis; white-space: nowrap; }
 .calendar-meeting span { margin-top: 5px; opacity: .72; font: 600 .5rem/1.35 var(--mono); text-transform: uppercase; }
 .calendar-section { overflow-x: auto; padding-bottom: 7px; }
+.calendar-modal-hero { position: relative; display: grid; min-height: 440px; grid-template-columns: minmax(310px, .75fr) minmax(0, 1.4fr); gap: clamp(42px, 8vw, 130px); align-items: center; padding: clamp(48px, 7vw, 95px) clamp(28px, 8vw, 125px); overflow: hidden; border-bottom: 1px solid var(--ink); background: linear-gradient(118deg, #e4dbff 0 38%, var(--cream) 38% 100%); }
+.calendar-modal-hero::before { position: absolute; top: -190px; right: -150px; width: 520px; height: 520px; border: 1px solid #c7b3f5; border-radius: 50%; box-shadow: 0 0 0 35px var(--cream), 0 0 0 36px #e2d8f7; content: ""; }
+.meeting-date-orbit { position: relative; display: grid; width: min(32vw, 330px); aspect-ratio: 1; place-items: center; justify-self: center; }
+.meeting-orbit { position: absolute; border: 1px solid #7452c1; border-radius: 50%; }
+.meeting-orbit--outer { inset: 2%; border-style: dashed; animation: atlas-spin 25s linear infinite; }
+.meeting-orbit--inner { inset: 20%; border-color: #ad92e2; animation: atlas-spin 16s linear infinite reverse; }
+.meeting-orbit-dot { position: absolute; width: 14px; height: 14px; border: 3px solid #e4dbff; border-radius: 50%; background: #8a5cf6; box-shadow: 0 0 0 1px #4e337f, 0 0 0 9px rgba(138,92,246,.1); animation: node-pulse 2.8s ease-in-out infinite; }
+.meeting-orbit-dot.dot-a { top: 9%; right: 25%; }
+.meeting-orbit-dot.dot-b { bottom: 19%; left: 8%; animation-delay: -1.4s; }
+.meeting-date-card { position: relative; z-index: 1; display: flex; width: 46%; aspect-ratio: 1; flex-direction: column; align-items: center; justify-content: center; color: #fff; border-radius: 50%; background: #4e337f; box-shadow: 11px 11px 0 #bca4f0; }
+.meeting-date-card strong { font: 600 clamp(3.4rem, 7vw, 6.6rem)/.72 var(--serif); letter-spacing: -.09em; }
+.meeting-date-card span { margin-top: 10px; color: var(--lime); font: 700 .72rem var(--mono); letter-spacing: .16em; text-transform: uppercase; }
+.meeting-date-card small { margin-top: 4px; color: #c3b7db; font: 600 .48rem var(--mono); letter-spacing: .11em; text-transform: uppercase; }
+.calendar-modal-identity { position: relative; z-index: 1; min-width: 0; }
+.calendar-modal-identity .entity-type { margin: 0 0 34px; }
+.calendar-modal-identity h2 { margin: 0; color: var(--forest-deep); font: 600 clamp(3.6rem, 8vw, 8.8rem)/.82 var(--serif); letter-spacing: -.075em; overflow-wrap: anywhere; }
+.meeting-date-line { margin: 21px 0 0; color: #675779; font: 500 clamp(1rem, 2vw, 1.45rem) var(--serif); }
+.calendar-modal-content { margin: clamp(25px, 5vw, 75px) clamp(18px, 5vw, 80px) clamp(40px, 7vw, 100px); }
+.calendar-modal-content-head { display: flex; align-items: center; justify-content: space-between; gap: 25px; padding: 25px 30px; color: #fff; border-bottom: 1px solid #4d396f; background: var(--forest-deep); }
+.calendar-modal-content-head .kicker { margin-bottom: 5px; color: #aa9fbd; }
+.calendar-modal-content-head h3 { margin: 0; font: 600 clamp(1.7rem, 3vw, 2.6rem)/1 var(--serif); letter-spacing: -.04em; }
 .meeting-detail { overflow: hidden; border: 1px solid var(--ink); background: var(--cream); box-shadow: 6px 6px 0 #8a5cf6; }
 .meeting-detail-heading { display: flex; gap: 30px; align-items: center; justify-content: space-between; padding: 27px 31px; color: #fff; background: var(--forest-deep); }
 .meeting-detail-heading .kicker { margin-bottom: 6px; color: #a7bdb5; }
@@ -454,7 +475,7 @@ svg { width: 1.15rem; height: 1.15rem; flex: 0 0 auto; }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 3px solid #4263eb; outline-offset: 2px; }
 
 @media (prefers-reduced-motion: reduce) {
-  .entity-drawer, .constellation-ring, .constellation-node { animation: none; }
+  .entity-drawer, .constellation-ring, .constellation-node, .meeting-orbit, .meeting-orbit-dot { animation: none; }
   .linked-record-list button { transition: none; }
 }
 
@@ -473,6 +494,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .entity-modal-hero { grid-template-columns: minmax(280px, .7fr) minmax(0, 1.3fr); gap: 45px; padding-right: 50px; padding-left: 50px; }
   .entity-modal-facts, .entity-modal-lineage { grid-column: span 7; }
   .entity-modal-links, .entity-modal-source { grid-column: span 5; }
+  .calendar-modal-hero { grid-template-columns: minmax(270px, .7fr) minmax(0, 1.3fr); gap: 50px; padding-right: 55px; padding-left: 55px; }
 }
 
 @media (max-width: 860px) {
@@ -511,6 +533,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .entity-constellation { width: min(30vw, 250px); }
   .entity-modal-identity h2 { font-size: clamp(3rem, 9vw, 5.6rem); }
   .entity-modal-facts, .entity-modal-links, .entity-modal-lineage, .entity-modal-source { grid-column: span 12; }
+  .calendar-modal-hero { min-height: 410px; grid-template-columns: 230px minmax(0, 1fr); gap: 32px; padding: 44px 30px; }
+  .meeting-date-orbit { width: min(29vw, 240px); }
+  .calendar-modal-identity h2 { font-size: clamp(3.2rem, 9vw, 5.8rem); }
 }
 
 @media (max-width: 620px) {
@@ -556,6 +581,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .lineage-timeline { grid-template-columns: 1fr; gap: 18px; }
   .lineage-point::after { display: none; }
   .entity-modal-json { margin: 12px 12px 88px; }
+  .calendar-modal-hero { grid-template-columns: 1fr; gap: 34px; padding: 40px 18px 45px; background: linear-gradient(180deg, #e4dbff 0 43%, var(--cream) 43% 100%); }
+  .meeting-date-orbit { width: 220px; }
+  .meeting-date-card { box-shadow: 7px 7px 0 #bca4f0; }
+  .calendar-modal-identity .entity-type { margin-bottom: 22px; }
+  .calendar-modal-identity h2 { font-size: clamp(3.2rem, 17vw, 5.4rem); }
+  .calendar-modal-content { margin: 18px 12px 88px; }
+  .calendar-modal-content-head { align-items: flex-start; flex-direction: column; padding: 23px 18px; }
+  .calendar-modal-content-head .meeting-location { width: 100%; }
   .pattern-row { grid-template-columns: 24px 1fr 18px 1fr 28px; gap: 8px; }
   .pattern-bar { display: none; }
   .pattern-row strong { font-size: .58rem; }

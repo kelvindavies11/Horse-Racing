@@ -50,6 +50,8 @@ const raceDay = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "2-dig
 const raceClock = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/London" });
 const calendarMonth = new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
 const calendarMeetingDay = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Europe/London" });
+const meetingDayNumber = new Intl.DateTimeFormat("en-GB", { day: "2-digit", timeZone: "Europe/London" });
+const meetingMonthShort = new Intl.DateTimeFormat("en-GB", { month: "short", timeZone: "Europe/London" });
 const relativeTime = new Intl.RelativeTimeFormat("en-GB", { numeric: "auto" });
 
 const formatDateTime = (value?: string | null) => (value ? dateTime.format(new Date(value)) : "Not recorded");
@@ -91,6 +93,15 @@ const useClientPagination = <T,>(items: readonly T[], pageSize: number, resetKey
   useEffect(() => setRequestedPage(1), [resetKey]);
 
   return { page, pageItems, totalPages, setPage: setRequestedPage };
+};
+
+const useFullscreenModal = (onClose: () => void) => {
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handleKeyDown);
+    document.body.classList.add("drawer-open");
+    return () => { document.removeEventListener("keydown", handleKeyDown); document.body.classList.remove("drawer-open"); };
+  }, [onClose]);
 };
 
 const londonDateKey = (value: string) => {
@@ -252,13 +263,13 @@ const calendarCells = (month: string) => {
 const CalendarPage = ({ month, setMonth, showLatest, data, error, isLoading, reload }: ReturnType<typeof useRaceCalendar>) => {
   const meetings = useMemo(() => groupRaceMeetings(data?.items ?? []), [data]);
   const [selectedMeetingKey, setSelectedMeetingKey] = useState<string>();
-  const selectedMeeting = meetings.find((meeting) => meeting.key === selectedMeetingKey) ?? meetings[0];
+  const selectedMeeting = meetings.find((meeting) => meeting.key === selectedMeetingKey);
   const [selectedRaceId, setSelectedRaceId] = useState<string>();
   const selectedRace = selectedMeeting?.races.find((race) => race.id === selectedRaceId) ?? selectedMeeting?.races[0];
 
   useEffect(() => {
-    if (meetings.length > 0 && !meetings.some((meeting) => meeting.key === selectedMeetingKey)) {
-      setSelectedMeetingKey(meetings[0].key);
+    if (selectedMeetingKey && !meetings.some((meeting) => meeting.key === selectedMeetingKey)) {
+      setSelectedMeetingKey(undefined);
     }
   }, [meetings, selectedMeetingKey]);
 
@@ -274,7 +285,7 @@ const CalendarPage = ({ month, setMonth, showLatest, data, error, isLoading, rel
     return lookup;
   }, [meetings]);
 
-  return <div className="page-wrap calendar-page">
+  return <><div className="page-wrap calendar-page">
     <section className="hero hero--calendar"><div><p className="kicker">Meetings / races / official results</p><h1>The racing<br /><em>calendar.</em></h1></div><div className="hero-copy"><p>Move through imported meetings by month, open a course card, then inspect every race, runner and observed condition.</p><span><i />All times shown in Europe/London</span></div></section>
     {isLoading && <PageSkeleton />}
     {!isLoading && error && <ApiError message={error} onRetry={reload} />}
@@ -284,15 +295,58 @@ const CalendarPage = ({ month, setMonth, showLatest, data, error, isLoading, rel
         <div className="calendar-toolbar"><div><p className="kicker">Imported programme</p><h2>{calendarMonth.format(new Date(`${month}-01T12:00:00Z`))}</h2></div><div className="calendar-controls"><button type="button" onClick={() => setMonth(shiftMonth(month, -1))} aria-label="Previous month"><ChevronIcon left /></button><label><span>Month</span><input type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label><button type="button" onClick={() => setMonth(shiftMonth(month, 1))} aria-label="Next month"><ChevronIcon /></button><button className="latest-month" type="button" onClick={showLatest}>Latest data</button></div></div>
         {data.items.length === 0 ? <NoCalendarMeetings /> : <div className="calendar-grid" role="grid" aria-label={`${calendarMonth.format(new Date(`${month}-01T12:00:00Z`))} race meetings`}>
           {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => <span className="calendar-weekday" role="columnheader" key={day}>{day}</span>)}
-          {calendarCells(month).map((cell, index) => cell ? <div className={meetingsByDate.has(cell.dateKey) ? "calendar-day has-meetings" : "calendar-day"} role="gridcell" key={cell.dateKey}><span className="calendar-day-number">{cell.day}</span><div className="calendar-day-meetings">{(meetingsByDate.get(cell.dateKey) ?? []).map((meeting) => <button type="button" className={selectedMeeting?.key === meeting.key ? "calendar-meeting selected" : "calendar-meeting"} aria-pressed={selectedMeeting?.key === meeting.key} key={meeting.key} onClick={() => setSelectedMeetingKey(meeting.key)}><strong>{meeting.courseName}</strong><span>{meeting.races.length} {meeting.races.length === 1 ? "race" : "races"} · first {raceClock.format(new Date(meeting.races[0].startUtc))}</span></button>)}</div></div> : <span className="calendar-day calendar-day--empty" role="gridcell" aria-hidden="true" key={`empty-${index}`} />)}
+          {calendarCells(month).map((cell, index) => cell ? <div className={meetingsByDate.has(cell.dateKey) ? "calendar-day has-meetings" : "calendar-day"} role="gridcell" key={cell.dateKey}><span className="calendar-day-number">{cell.day}</span><div className="calendar-day-meetings">{(meetingsByDate.get(cell.dateKey) ?? []).map((meeting) => <button type="button" className={selectedMeeting?.key === meeting.key ? "calendar-meeting selected" : "calendar-meeting"} aria-pressed={selectedMeeting?.key === meeting.key} key={meeting.key} onClick={() => { setSelectedRaceId(undefined); setSelectedMeetingKey(meeting.key); }}><strong>{meeting.courseName}</strong><span>{meeting.races.length} {meeting.races.length === 1 ? "race" : "races"} · first {raceClock.format(new Date(meeting.races[0].startUtc))}</span></button>)}</div></div> : <span className="calendar-day calendar-day--empty" role="gridcell" aria-hidden="true" key={`empty-${index}`} />)}
         </div>}
       </section>
-      {selectedMeeting && selectedRace && <section className="section-block meeting-detail" data-testid="calendar-meeting-detail">
-        <div className="meeting-detail-heading"><div><p className="kicker">Selected meeting</p><h2>{selectedMeeting.courseName}</h2><span>{calendarMeetingDay.format(new Date(selectedMeeting.races[0].startUtc))} · {selectedMeeting.races.length} {selectedMeeting.races.length === 1 ? "race" : "races"}</span></div>{selectedRace.location && <div className="meeting-location"><small>Course position</small><strong>{selectedRace.location.postcode ?? "Postcode not recorded"}</strong><span>{selectedRace.location.latitude.toFixed(4)}, {selectedRace.location.longitude.toFixed(4)}</span></div>}</div>
-        <div className="race-tabs" role="tablist" aria-label={`${selectedMeeting.courseName} races`}>{selectedMeeting.races.map((race) => <button type="button" role="tab" aria-selected={race.id === selectedRace.id} key={race.id} onClick={() => setSelectedRaceId(race.id)}><strong>{raceClock.format(new Date(race.startUtc))}</strong><span>{race.raceName}</span><small>{race.runners.length} runners · {race.distance}</small></button>)}</div>
-        <RaceResultDetail race={selectedRace} />
-      </section>}
     </>}
+  </div>{selectedMeeting && selectedRace && <CalendarMeetingModal meeting={selectedMeeting} selectedRace={selectedRace} onSelectRace={setSelectedRaceId} onClose={() => { setSelectedMeetingKey(undefined); setSelectedRaceId(undefined); }} />}</>;
+};
+
+const CalendarMeetingModal = ({ meeting, selectedRace, onSelectRace, onClose }: { meeting: CalendarMeeting; selectedRace: CuratedRaceResult; onSelectRace: (raceId: string) => void; onClose: () => void }) => {
+  useFullscreenModal(onClose);
+  const meetingDate = new Date(meeting.races[0].startUtc);
+  const runnerCount = meeting.races.reduce((total, race) => total + race.runners.length, 0);
+  const weatherCount = meeting.races.filter((race) => race.weather).length;
+  const firstPost = raceClock.format(meetingDate);
+  const lastPost = raceClock.format(new Date(meeting.races.at(-1)!.startUtc));
+
+  return <div className="drawer-backdrop" role="presentation">
+    <aside className="entity-drawer entity-modal calendar-meeting-modal" role="dialog" aria-modal="true" aria-label={`${meeting.courseName} meeting details`} style={{ "--entity-colour": "#8a5cf6" } as CSSProperties} data-testid="calendar-meeting-modal">
+      <header className="entity-modal-bar">
+        <div className="atlas-brand"><span>Calendar / {calendarMeetingDay.format(meetingDate)}</span><strong>Meeting atlas</strong></div>
+        <div className="atlas-actions"><span>Esc to return</span><button className="icon-button modal-close" type="button" onClick={onClose} aria-label="Close meeting details"><CloseIcon /></button></div>
+      </header>
+
+      <div className="entity-modal-scroll calendar-modal-scroll">
+        <section className="calendar-modal-hero">
+          <div className="meeting-date-orbit" aria-hidden="true">
+            <span className="meeting-orbit meeting-orbit--outer" />
+            <span className="meeting-orbit meeting-orbit--inner" />
+            <span className="meeting-orbit-dot dot-a" />
+            <span className="meeting-orbit-dot dot-b" />
+            <div className="meeting-date-card"><strong>{meetingDayNumber.format(meetingDate)}</strong><span>{meetingMonthShort.format(meetingDate)}</span><small>London</small></div>
+          </div>
+          <div className="calendar-modal-identity">
+            <span className="entity-type"><i />Race meeting</span>
+            <p className="atlas-kicker">Official results / meeting room</p>
+            <h2>{meeting.courseName}</h2>
+            <p className="meeting-date-line">{calendarMeetingDay.format(meetingDate)}</p>
+            <div className="entity-hero-signals">
+              <span><small>Race window</small><strong>{firstPost} — {lastPost}</strong></span>
+              <span><small>Races</small><strong>{meeting.races.length}</strong></span>
+              <span><small>Declared runners</small><strong>{runnerCount}</strong></span>
+              <span><small>Weather observations</small><strong>{weatherCount} / {meeting.races.length}</strong></span>
+            </div>
+          </div>
+        </section>
+
+        <section className="calendar-modal-content meeting-detail" data-testid="calendar-meeting-detail">
+          <div className="calendar-modal-content-head"><div><p className="kicker">Meeting card</p><h3>Choose a race</h3></div>{selectedRace.location && <div className="meeting-location"><small>Course position</small><strong>{selectedRace.location.postcode ?? "Postcode not recorded"}</strong><span>{selectedRace.location.latitude.toFixed(4)}, {selectedRace.location.longitude.toFixed(4)}</span></div>}</div>
+          <div className="race-tabs" role="tablist" aria-label={`${meeting.courseName} races`}>{meeting.races.map((race) => <button type="button" role="tab" aria-selected={race.id === selectedRace.id} key={race.id} onClick={() => onSelectRace(race.id)}><strong>{raceClock.format(new Date(race.startUtc))}</strong><span>{race.raceName}</span><small>{race.runners.length} runners · {race.distance}</small></button>)}</div>
+          <RaceResultDetail race={selectedRace} />
+        </section>
+      </div>
+    </aside>
   </div>;
 };
 
@@ -395,13 +449,7 @@ const EntityDrawer = ({ entity, onNavigate, onClose }: { entity: CuratedEntity; 
   const propertyPages = useClientPagination(properties, 12, entity.id);
   const connectionLinks = connections?.links ?? [];
   const connectionPages = useClientPagination(connectionLinks, 8, entity.id);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
-    document.addEventListener("keydown", handleKeyDown);
-    document.body.classList.add("drawer-open");
-    return () => { document.removeEventListener("keydown", handleKeyDown); document.body.classList.remove("drawer-open"); };
-  }, [onClose]);
+  useFullscreenModal(onClose);
 
   useEffect(() => {
     const controller = new AbortController();
