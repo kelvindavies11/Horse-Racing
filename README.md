@@ -114,14 +114,18 @@ Collect and promote a historical result range, then attach course location and h
 historical weather to every available race:
 
 ```powershell
-$env:BhaCollection__RacingStatusApiBearerToken = '<operator-supplied token>'
+# First refresh the public results-client token as documented below.
 dotnet run --project src/HorseRacing.RaceDataSync -- --from 2026-09-29 --to 2026-10-05
 ```
 
 The sync defaults to the seven most recently completed dates and is limited to 32 days.
 It uses audited BHA result/course payloads and Open-Meteo historical weather, with no
 credential committed or sent to the browser. See the
-[race results and weather guide](docs/RACE-RESULTS-WEATHER.md).
+[race results and weather guide](docs/RACE-RESULTS-WEATHER.md). The repeatable token
+refresh and validation procedure is documented in the
+[BHA Raw collector guide](docs/BHA-RAW-COLLECTOR.md#refresh-the-public-results-token);
+agents should perform it by default before a results import and never display or commit
+the token.
 
 Start the website in a second terminal:
 

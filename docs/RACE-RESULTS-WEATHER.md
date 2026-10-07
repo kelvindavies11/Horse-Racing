@@ -12,13 +12,18 @@ The `HorseRacing.RaceDataSync` console job collects a bounded historical date ra
 
 ## Run a date range
 
-Apply migrations and set the API connection string plus the current BHA result bearer token outside source control:
+Apply migrations, set the API connection string, and use the
+[documented refresh procedure](BHA-RAW-COLLECTOR.md#refresh-the-public-results-token) to
+capture and validate the current BHA public results-client token outside source control:
 
 ```powershell
 $env:ConnectionStrings__HorseRacing = 'Host=localhost;Port=5433;Database=horse_racing;Username=horse_racing;Password=horse_racing_local'
-$env:BhaCollection__RacingStatusApiBearerToken = '<operator-supplied token>'
+# Refresh BhaCollection__RacingStatusApiBearerToken, then run:
 dotnet run --project src/HorseRacing.RaceDataSync -- --from 2026-09-29 --to 2026-10-05
 ```
+
+Refresh the token by default before an unattended multi-month import and after a `401` or
+`403`. Never echo it, paste it into logs or chat, or store it in source-controlled files.
 
 The inclusive range is limited to 32 days. With no arguments, the job imports the seven most recently completed UTC dates. The default one-second BHA request interval plus bounded 429 retry/backoff is deliberate; do not lower it for unattended use. A missing upstream race result remains a failed Raw audit row and does not fabricate a result.
 
