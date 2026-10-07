@@ -64,6 +64,7 @@ public sealed record RaceResultsFeed(
 public sealed record CuratedRaceResult(
     Guid Id,
     string SourceKey,
+    string MeetingSourceKey,
     string RaceName,
     string CourseName,
     DateTimeOffset StartUtc,

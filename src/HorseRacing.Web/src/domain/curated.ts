@@ -104,6 +104,7 @@ export interface RunnerResultView {
 export interface CuratedRaceResult {
   id: string;
   sourceKey: string;
+  meetingSourceKey: string;
   raceName: string;
   courseName: string;
   startUtc: string;

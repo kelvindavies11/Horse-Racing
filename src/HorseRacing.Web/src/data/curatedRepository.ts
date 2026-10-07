@@ -44,8 +44,12 @@ export const curatedRepository = {
     return readJson<RelationshipGraph>("/v1/curated/relationships?limit=500", signal);
   },
 
-  getResults(signal?: AbortSignal) {
-    return readJson<RaceResultsFeed>("/v1/curated/results", signal);
+  getResults(options?: { from?: string; to?: string; signal?: AbortSignal }) {
+    const parameters = new URLSearchParams();
+    if (options?.from) parameters.set("from", options.from);
+    if (options?.to) parameters.set("to", options.to);
+    const query = parameters.size > 0 ? `?${parameters}` : "";
+    return readJson<RaceResultsFeed>(`/v1/curated/results${query}`, options?.signal);
   },
 
   getAudit(signal?: AbortSignal) {

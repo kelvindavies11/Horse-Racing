@@ -29,6 +29,20 @@ The inclusive range is limited to 32 days. With no arguments, the job imports th
 
 The result flow is safe to rerun: Raw attempts remain immutable, promotion upserts by source identity while retaining observation history, and the location/weather rows are upserted by course identity and Curated race respectively.
 
+## Long historical batches
+
+Use the restartable monthly runner for longer periods. It records one immutable status row per monthly attempt, skips months that have already succeeded, promotes each month's Raw payloads to Curated, and retains the same weather-enrichment step:
+
+```powershell
+./scripts/resume-monthly-race-data-history.ps1 `
+  -StartMonth 2015-01 `
+  -EndMonth 2021-09 `
+  -StateDirectory artifacts/2015-2021-sync `
+  -RequestDelayMilliseconds 5000
+```
+
+The resume process refreshes and validates the public BHA results-client token using the official-site workflow, waits through `418`/`429` throttling, and refuses to run alongside another historical `RaceDataSync` or resume process. January 2015 through September 2021 is 81 monthly batches; October 2021 onward belongs to the existing 60-month batch, so the two ranges do not overlap. On completion the runner performs the idempotent participant backfill used by Explore.
+
 ## API and website
 
 `GET /api/v1/curated/results?from=YYYY-MM-DD&to=YYYY-MM-DD` returns an inclusive range of up to 32 days. Omitting dates selects the seven-day window ending on the latest race that has both meeting context and runner results in Curated, so a historical or actively importing local copy opens with populated results. Each race contains its meeting/course context, ordered finishers and non-runners, declared winner, location provenance and race-hour weather when available.
@@ -41,7 +55,7 @@ After upgrading an existing local database, materialize participant identities f
 
 The backfill is idempotent, preserves Raw payload and promotion lineage, and does not call or interrupt any Raw source job. Direct participant records are left unchanged; only result-derived records are refreshed.
 
-The website's **Results** workspace provides search, race selection, winner and race facts, course coordinates/postcode, weather, and the full finishing order. **Explore** remains the generic Curated entity and inferred-pattern workspace. **Admin audit** exposes the Raw result/weather jobs and Curated promotions without exposing response bytes or credentials.
+The website's **Results** workspace provides search, race selection, winner and race facts, course coordinates/postcode, weather, and the full finishing order. **Calendar** opens on the latest imported month, groups races by their BHA meeting identity, and provides one tab per race with runners, jockeys, trainers, owners, odds, status, course details and race-time weather. **Explore** remains the generic Curated entity and inferred-pattern workspace. **Admin audit** exposes the Raw result/weather jobs and Curated promotions without exposing response bytes or credentials.
 
 ## Persisted enrichment
 

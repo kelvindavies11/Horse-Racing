@@ -222,6 +222,7 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
             items.Add(new CuratedRaceResult(
                 race.Row.Id,
                 race.Row.SourceKey,
+                $"{race.FixtureYear}:{race.FixtureId}",
                 race.Row.DisplayName,
                 meeting.CourseName,
                 ToUtc(race.LocalDate, race.LocalTime),

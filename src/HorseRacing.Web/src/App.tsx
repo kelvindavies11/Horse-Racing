@@ -18,9 +18,9 @@ import type {
   RelationshipNode,
   RunnerResultView,
 } from "./domain/curated";
-import { useAudit, useCuratedData, useRaceResults } from "./hooks/useCuratedData";
+import { useAudit, useCuratedData, useRaceCalendar, useRaceResults } from "./hooks/useCuratedData";
 
-type AppView = "results" | "explore" | "patterns" | "admin";
+type AppView = "results" | "calendar" | "explore" | "patterns" | "admin";
 type AuditTab = "raw" | "curated";
 
 const Icon = ({ children, ...props }: SVGProps<SVGSVGElement> & { children: ReactNode }) => (
@@ -31,6 +31,7 @@ const CompassIcon = () => <Icon><circle cx="12" cy="12" r="9" /><path d="m15.5 8
 const NodesIcon = () => <Icon><circle cx="5" cy="12" r="2.5" /><circle cx="18" cy="6" r="2.5" /><circle cx="18" cy="18" r="2.5" /><path d="m7.3 10.9 8.4-3.8M7.3 13.1l8.4 3.8" /></Icon>;
 const ShieldIcon = () => <Icon><path d="M12 3 5 6v5c0 4.8 2.8 8.2 7 10 4.2-1.8 7-5.2 7-10V6l-7-3Z" /><path d="m9 12 2 2 4-4" /></Icon>;
 const TrophyIcon = () => <Icon><path d="M8 4h8v4c0 3-1.8 5-4 5s-4-2-4-5V4Z" /><path d="M8 6H5v2c0 2 1.2 3 3.3 3M16 6h3v2c0 2-1.2 3-3.3 3M12 13v4m-4 3h8M9 17h6" /></Icon>;
+const CalendarIcon = () => <Icon><path d="M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Z" /><path d="M3 9h18M8 2v4m8-4v4M7 13h3m4 0h3m-10 4h3m4 0h3" /></Icon>;
 const SearchIcon = () => <Icon><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></Icon>;
 const RefreshIcon = () => <Icon><path d="M20 7v5h-5M4 17v-5h5" /><path d="M6.1 8.1A7.5 7.5 0 0 1 19.5 12M4.5 12a7.5 7.5 0 0 0 13.4 3.9" /></Icon>;
 const ArrowIcon = () => <Icon><path d="M5 12h14m-5-5 5 5-5 5" /></Icon>;
@@ -45,6 +46,8 @@ const number = new Intl.NumberFormat("en-GB");
 const dateTime = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/London" });
 const raceDay = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "2-digit", month: "short", timeZone: "Europe/London" });
 const raceClock = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/London" });
+const calendarMonth = new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
+const calendarMeetingDay = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Europe/London" });
 const relativeTime = new Intl.RelativeTimeFormat("en-GB", { numeric: "auto" });
 
 const formatDateTime = (value?: string | null) => (value ? dateTime.format(new Date(value)) : "Not recorded");
@@ -76,9 +79,21 @@ const typePalette = ["#df4c33", "#4263eb", "#14866d", "#8a5cf6", "#c88405", "#d6
 const typeColour = (value: string) => typePalette[[...value].reduce((total, character) => total + character.charCodeAt(0), 0) % typePalette.length];
 const typeStyle = (type: string) => ({ "--entity-colour": typeColour(type) }) as CSSProperties;
 
+const londonDateKey = (value: string) => {
+  const parts = new Intl.DateTimeFormat("en-GB", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: "Europe/London" }).formatToParts(new Date(value));
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+};
+
+const shiftMonth = (month: string, offset: number) => {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const shifted = new Date(Date.UTC(year, monthNumber - 1 + offset, 1));
+  return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, "0")}`;
+};
+
 const currentView = (): AppView => {
   const value = window.location.hash.replace("#", "");
-  return value === "results" || value === "patterns" || value === "admin" ? value : "explore";
+  return value === "results" || value === "calendar" || value === "patterns" || value === "admin" ? value : "explore";
 };
 
 function App() {
@@ -91,6 +106,7 @@ function App() {
   const curated = useCuratedData(type, deferredQuery, page);
   const audit = useAudit(view === "admin");
   const results = useRaceResults(view === "results");
+  const calendar = useRaceCalendar(view === "calendar");
 
   const navigate = (nextView: AppView) => {
     setView(nextView);
@@ -100,6 +116,7 @@ function App() {
 
   const refresh = () => {
     if (view === "admin") audit.reload();
+    else if (view === "calendar") calendar.reload();
     else if (view === "results") results.reload();
     else curated.reload();
   };
@@ -115,6 +132,7 @@ function App() {
         </header>
 
         {view === "results" && <ResultsPage {...results} />}
+        {view === "calendar" && <CalendarPage {...calendar} />}
         {view === "explore" && <ExplorerPage {...curated} type={type} query={query} page={page} onTypeChange={(value) => { setType(value); setPage(1); }} onQueryChange={(value) => { setQuery(value); setPage(1); }} onPageChange={setPage} onSelect={setSelectedEntity} />}
         {view === "patterns" && <PatternsPage graph={curated.relationships} isLoading={curated.isLoading} error={curated.error} onRetry={curated.reload} />}
         {view === "admin" && <AdminPage {...audit} />}
@@ -130,10 +148,11 @@ const Sidebar = ({ view, onNavigate }: { view: AppView; onNavigate: (view: AppVi
     <nav className="primary-nav" aria-label="Primary navigation">
       <p className="nav-label">Workspace</p>
       <button className={view === "results" ? "nav-item active" : "nav-item"} type="button" onClick={() => onNavigate("results")}><TrophyIcon /><span>Race results</span><small>01</small></button>
-      <button className={view === "explore" ? "nav-item active" : "nav-item"} type="button" onClick={() => onNavigate("explore")}><CompassIcon /><span>Explore</span><small>02</small></button>
-      <button className={view === "patterns" ? "nav-item active" : "nav-item"} type="button" onClick={() => onNavigate("patterns")}><NodesIcon /><span>Patterns</span><small>03</small></button>
+      <button className={view === "calendar" ? "nav-item active" : "nav-item"} type="button" onClick={() => onNavigate("calendar")}><CalendarIcon /><span>Calendar</span><small>02</small></button>
+      <button className={view === "explore" ? "nav-item active" : "nav-item"} type="button" onClick={() => onNavigate("explore")}><CompassIcon /><span>Explore</span><small>03</small></button>
+      <button className={view === "patterns" ? "nav-item active" : "nav-item"} type="button" onClick={() => onNavigate("patterns")}><NodesIcon /><span>Patterns</span><small>04</small></button>
       <p className="nav-label nav-label--admin">Operations</p>
-      <button className={view === "admin" ? "nav-item active" : "nav-item"} type="button" onClick={() => onNavigate("admin")}><ShieldIcon /><span>Admin audit</span><small>04</small></button>
+      <button className={view === "admin" ? "nav-item active" : "nav-item"} type="button" onClick={() => onNavigate("admin")}><ShieldIcon /><span>Admin audit</span><small>05</small></button>
     </nav>
     <div className="sidebar-foot"><div className="layer-card"><span><DatabaseIcon /></span><div><strong>Curated layer</strong><small>Read-only · PostgreSQL</small></div></div><p>Source → Raw → Curated<br />Local pipeline / UK</p></div>
   </aside>
@@ -179,10 +198,90 @@ const ResultsPage = ({ data, error, isLoading, reload }: ReturnType<typeof useRa
 
 const RaceResultListItem = ({ race, selected, onSelect }: { race: CuratedRaceResult; selected: boolean; onSelect: () => void }) => <button type="button" className={selected ? "race-result-item selected" : "race-result-item"} onClick={onSelect}><span className="race-result-time"><strong>{raceClock.format(new Date(race.startUtc))}</strong><small>{raceDay.format(new Date(race.startUtc))}</small></span><span className="race-result-summary"><small>{race.courseName} · {race.distance}</small><strong>{race.raceName}</strong><span>{race.abandoned ? "Abandoned" : race.winner ? <><b>1</b>{race.winner}</> : "Result recorded"}</span></span><span className={race.weather ? "weather-pin ready" : "weather-pin"} title={race.weather ? "Race-time weather available" : "Weather pending"}>{race.weather ? `${Math.round(race.weather.temperatureC)}°` : "—"}</span></button>;
 
+interface CalendarMeeting {
+  key: string;
+  dateKey: string;
+  courseName: string;
+  races: CuratedRaceResult[];
+}
+
+const groupRaceMeetings = (races: CuratedRaceResult[]) => {
+  const grouped = new Map<string, CalendarMeeting>();
+  for (const race of races) {
+    const dateKey = londonDateKey(race.startUtc);
+    const key = race.meetingSourceKey || `${dateKey}:${race.courseName}`;
+    const existing = grouped.get(key);
+    if (existing) existing.races.push(race);
+    else grouped.set(key, { key, dateKey, courseName: race.courseName, races: [race] });
+  }
+  return [...grouped.values()]
+    .map((meeting) => ({ ...meeting, races: meeting.races.sort((left, right) => left.startUtc.localeCompare(right.startUtc)) }))
+    .sort((left, right) => left.races[0].startUtc.localeCompare(right.races[0].startUtc));
+};
+
+const calendarCells = (month: string) => {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const firstDay = new Date(Date.UTC(year, monthNumber - 1, 1));
+  const leadingDays = (firstDay.getUTCDay() + 6) % 7;
+  const dayCount = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+  const cells: ({ day: number; dateKey: string } | null)[] = Array.from({ length: leadingDays }, () => null);
+  for (let day = 1; day <= dayCount; day += 1) {
+    cells.push({ day, dateKey: `${month}-${String(day).padStart(2, "0")}` });
+  }
+  return cells;
+};
+
+const CalendarPage = ({ month, setMonth, showLatest, data, error, isLoading, reload }: ReturnType<typeof useRaceCalendar>) => {
+  const meetings = useMemo(() => groupRaceMeetings(data?.items ?? []), [data]);
+  const [selectedMeetingKey, setSelectedMeetingKey] = useState<string>();
+  const selectedMeeting = meetings.find((meeting) => meeting.key === selectedMeetingKey) ?? meetings[0];
+  const [selectedRaceId, setSelectedRaceId] = useState<string>();
+  const selectedRace = selectedMeeting?.races.find((race) => race.id === selectedRaceId) ?? selectedMeeting?.races[0];
+
+  useEffect(() => {
+    if (meetings.length > 0 && !meetings.some((meeting) => meeting.key === selectedMeetingKey)) {
+      setSelectedMeetingKey(meetings[0].key);
+    }
+  }, [meetings, selectedMeetingKey]);
+
+  useEffect(() => {
+    if (selectedMeeting && !selectedMeeting.races.some((race) => race.id === selectedRaceId)) {
+      setSelectedRaceId(selectedMeeting.races[0].id);
+    }
+  }, [selectedMeeting, selectedRaceId]);
+
+  const meetingsByDate = useMemo(() => {
+    const lookup = new Map<string, CalendarMeeting[]>();
+    for (const meeting of meetings) lookup.set(meeting.dateKey, [...(lookup.get(meeting.dateKey) ?? []), meeting]);
+    return lookup;
+  }, [meetings]);
+
+  return <div className="page-wrap calendar-page">
+    <section className="hero hero--calendar"><div><p className="kicker">Meetings / races / official results</p><h1>The racing<br /><em>calendar.</em></h1></div><div className="hero-copy"><p>Move through imported meetings by month, open a course card, then inspect every race, runner and observed condition.</p><span><i />All times shown in Europe/London</span></div></section>
+    {isLoading && <PageSkeleton />}
+    {!isLoading && error && <ApiError message={error} onRetry={reload} />}
+    {!isLoading && month && data && <>
+      <section className="metric-strip calendar-metrics"><Metric value={number.format(meetings.length)} label="Race meetings" note={calendarMonth.format(new Date(`${month}-01T12:00:00Z`))} index="01" /><Metric value={number.format(data.totalRaces)} label="Completed races" note={`${number.format(data.totalRunners)} declared runners`} index="02" /><Metric value={`${data.totalRaces === 0 ? 0 : Math.round((data.weatherEnrichedRaces / data.totalRaces) * 100)}%`} label="Weather coverage" note={`${data.weatherEnrichedRaces} race-hour observations`} index="03" /></section>
+      <section className="section-block calendar-section">
+        <div className="calendar-toolbar"><div><p className="kicker">Imported programme</p><h2>{calendarMonth.format(new Date(`${month}-01T12:00:00Z`))}</h2></div><div className="calendar-controls"><button type="button" onClick={() => setMonth(shiftMonth(month, -1))} aria-label="Previous month"><ChevronIcon left /></button><label><span>Month</span><input type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label><button type="button" onClick={() => setMonth(shiftMonth(month, 1))} aria-label="Next month"><ChevronIcon /></button><button className="latest-month" type="button" onClick={showLatest}>Latest data</button></div></div>
+        {data.items.length === 0 ? <NoCalendarMeetings /> : <div className="calendar-grid" role="grid" aria-label={`${calendarMonth.format(new Date(`${month}-01T12:00:00Z`))} race meetings`}>
+          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => <span className="calendar-weekday" role="columnheader" key={day}>{day}</span>)}
+          {calendarCells(month).map((cell, index) => cell ? <div className={meetingsByDate.has(cell.dateKey) ? "calendar-day has-meetings" : "calendar-day"} role="gridcell" key={cell.dateKey}><span className="calendar-day-number">{cell.day}</span><div className="calendar-day-meetings">{(meetingsByDate.get(cell.dateKey) ?? []).map((meeting) => <button type="button" className={selectedMeeting?.key === meeting.key ? "calendar-meeting selected" : "calendar-meeting"} aria-pressed={selectedMeeting?.key === meeting.key} key={meeting.key} onClick={() => setSelectedMeetingKey(meeting.key)}><strong>{meeting.courseName}</strong><span>{meeting.races.length} {meeting.races.length === 1 ? "race" : "races"} · first {raceClock.format(new Date(meeting.races[0].startUtc))}</span></button>)}</div></div> : <span className="calendar-day calendar-day--empty" role="gridcell" aria-hidden="true" key={`empty-${index}`} />)}
+        </div>}
+      </section>
+      {selectedMeeting && selectedRace && <section className="section-block meeting-detail" data-testid="calendar-meeting-detail">
+        <div className="meeting-detail-heading"><div><p className="kicker">Selected meeting</p><h2>{selectedMeeting.courseName}</h2><span>{calendarMeetingDay.format(new Date(selectedMeeting.races[0].startUtc))} · {selectedMeeting.races.length} {selectedMeeting.races.length === 1 ? "race" : "races"}</span></div>{selectedRace.location && <div className="meeting-location"><small>Course position</small><strong>{selectedRace.location.postcode ?? "Postcode not recorded"}</strong><span>{selectedRace.location.latitude.toFixed(4)}, {selectedRace.location.longitude.toFixed(4)}</span></div>}</div>
+        <div className="race-tabs" role="tablist" aria-label={`${selectedMeeting.courseName} races`}>{selectedMeeting.races.map((race) => <button type="button" role="tab" aria-selected={race.id === selectedRace.id} key={race.id} onClick={() => setSelectedRaceId(race.id)}><strong>{raceClock.format(new Date(race.startUtc))}</strong><span>{race.raceName}</span><small>{race.runners.length} runners · {race.distance}</small></button>)}</div>
+        <RaceResultDetail race={selectedRace} />
+      </section>}
+    </>}
+  </div>;
+};
+
 const RaceResultDetail = ({ race }: { race: CuratedRaceResult }) => <article className="race-result-detail" data-testid="race-result-detail">
   <header className="result-detail-head"><div><p className="kicker">{raceDay.format(new Date(race.startUtc))} · {raceClock.format(new Date(race.startUtc))} · {race.courseName}</p><h2>{race.raceName}</h2><div className="race-tags"><span>{race.raceType}</span>{race.raceClass && <span>Class {race.raceClass}</span>}<span>{race.distance}</span><span>{race.going}</span>{race.prizeAmount != null && <span>{new Intl.NumberFormat("en-GB", { style: "currency", currency: race.prizeCurrency ?? "GBP", maximumFractionDigits: 0 }).format(race.prizeAmount)}</span>}</div></div><span className="result-seal"><TrophyIcon /><small>{race.abandoned ? "Status" : "Winner"}</small><strong>{race.abandoned ? "Abandoned" : race.winner ?? "Recorded"}</strong></span></header>
   <div className="race-context-grid"><RaceWeatherCard race={race} /><div className="course-context"><p className="context-label">Course position</p>{race.location ? <><strong>{race.courseName}</strong><span>{race.location.latitude.toFixed(4)}, {race.location.longitude.toFixed(4)}</span><small>{race.location.postcode ?? "Postcode not recorded"} · {race.location.locationSource}</small></> : <><strong>{race.courseName}</strong><span>Location pending</span><small>Weather enrichment requires resolved coordinates.</small></>}</div></div>
-  <section className="finishing-order"><div className="finishing-title"><div><p className="kicker">Official order</p><h3>{race.runners.length} declared runners</h3></div><span>Odds shown as returned by source</span></div><div className="runner-table" role="table" aria-label={`Finishing order for ${race.raceName}`}><div className="runner-row runner-row--head" role="row"><span>Pos</span><span>Horse</span><span>Jockey / trainer</span><span>SP</span><span>Distance / time</span></div>{race.runners.map((runner, index) => <RunnerResultRow key={`${runner.horseName}-${index}`} runner={runner} />)}</div></section>
+  <section className="finishing-order"><div className="finishing-title"><div><p className="kicker">Official order</p><h3>{race.runners.length} declared runners</h3></div><span>Odds shown as returned by source</span></div><div className="runner-table" role="table" aria-label={`Finishing order for ${race.raceName}`}><div className="runner-row runner-row--head" role="row"><span>Pos</span><span>Horse</span><span>Jockey / trainer / owner</span><span>SP</span><span>Distance / time</span></div>{race.runners.map((runner, index) => <RunnerResultRow key={`${runner.horseName}-${index}`} runner={runner} />)}</div></section>
 </article>;
 
 const RaceWeatherCard = ({ race }: { race: CuratedRaceResult }) => {
@@ -191,7 +290,7 @@ const RaceWeatherCard = ({ race }: { race: CuratedRaceResult }) => {
   return <div className="weather-card"><div className="weather-now"><p className="context-label">Race-time weather</p><strong>{weather.temperatureC.toFixed(1)}°</strong><span>{weatherLabel(weather.weatherCode)}</span><small>Feels like {weather.apparentTemperatureC.toFixed(1)}°C</small></div><dl><div><dt>Rain</dt><dd>{weather.precipitationMillimetres.toFixed(1)} mm</dd></div><div><dt>Humidity</dt><dd>{weather.relativeHumidityPercent}%</dd></div><div><dt>Wind</dt><dd>{weather.windSpeedKilometresPerHour.toFixed(1)} km/h</dd></div><div><dt>Gusts</dt><dd>{weather.windGustKilometresPerHour.toFixed(1)} km/h</dd></div></dl><a href={weather.sourceUrl} target="_blank" rel="noreferrer">Open-Meteo at {formatDateTime(weather.weatherHourUtc)} <ExternalIcon /></a></div>;
 };
 
-const RunnerResultRow = ({ runner }: { runner: RunnerResultView }) => <div className={runner.finishPosition === 1 ? "runner-row winner" : runner.status === "NonRunner" ? "runner-row non-runner" : "runner-row"} role="row"><span className="finish-position">{runner.finishPosition ?? (runner.status === "NonRunner" ? "NR" : "—")}</span><span className="runner-horse"><i aria-hidden="true">{runner.clothNumber ?? "—"}</i><span><strong>{runner.horseName}</strong><small>Cloth {runner.clothNumber ?? "—"} · Draw {runner.draw ?? "—"}</small></span></span><span><strong>{runner.jockeyName ?? "Jockey not recorded"}</strong><small>{runner.trainerName ?? "Trainer not recorded"}</small></span><span>{runner.bettingRatio ?? "—"}</span><span>{runner.nonRunnerReason ?? runner.distanceFromWinner ?? (runner.finishPosition === 1 ? "Winner" : "—")}<small>{runner.finishTime ?? runner.status}</small></span></div>;
+const RunnerResultRow = ({ runner }: { runner: RunnerResultView }) => <div className={runner.finishPosition === 1 ? "runner-row winner" : runner.status === "NonRunner" ? "runner-row non-runner" : "runner-row"} role="row"><span className="finish-position">{runner.finishPosition ?? (runner.status === "NonRunner" ? "NR" : "—")}</span><span className="runner-horse"><i aria-hidden="true">{runner.clothNumber ?? "—"}</i><span><strong>{runner.horseName}</strong><small>Cloth {runner.clothNumber ?? "—"} · Draw {runner.draw ?? "—"}</small></span></span><span className="runner-connections"><strong>{runner.jockeyName ?? "Jockey not recorded"}</strong><small>Trainer · {runner.trainerName ?? "Not recorded"}</small><small>Owner · {runner.ownerName ?? "Not recorded"}</small></span><span>{runner.bettingRatio ?? "—"}</span><span>{runner.nonRunnerReason ?? runner.distanceFromWinner ?? (runner.finishPosition === 1 ? "Winner" : "—")}<small>{runner.finishTime ?? runner.status}</small></span></div>;
 
 const weatherLabel = (code: number) => {
   if (code === 0) return "Clear";
@@ -205,6 +304,7 @@ const weatherLabel = (code: number) => {
 };
 
 const EmptyResults = () => <section className="empty-collection"><span><TrophyIcon /></span><p className="kicker">Result layer is ready</p><h2>No completed races have been imported yet.</h2><p>Run the results synchronisation to collect BHA results, promote the records and attach race-time weather.</p><code>dotnet run --project src/HorseRacing.RaceDataSync</code></section>;
+const NoCalendarMeetings = () => <section className="empty-collection calendar-empty"><span><CalendarIcon /></span><p className="kicker">No imported meetings</p><h2>This month has no completed race results.</h2><p>Choose another month or return to the latest imported data.</p></section>;
 const NoResultMatches = ({ onClear }: { onClear: () => void }) => <div className="no-matches"><SearchIcon /><h3>No race results match</h3><p>Try another course, race name or winner.</p><button type="button" onClick={onClear}>Clear search</button></div>;
 
 interface ExplorerPageProps {
