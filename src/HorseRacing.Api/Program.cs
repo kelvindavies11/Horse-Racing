@@ -7,6 +7,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddScoped<CreateRaceHandler>();
+builder.Services.AddSingleton<ImportControlService>();
 
 var app = builder.Build();
 
@@ -15,6 +16,7 @@ app.UseHttpsRedirection();
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 
 app.MapCuratedReadEndpoints();
+app.MapImportControlEndpoints();
 
 app.MapPost(
     "/api/races",

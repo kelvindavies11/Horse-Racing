@@ -196,3 +196,55 @@ export interface AuditSnapshot {
   rawRuns: RawRunAudit[];
   promotionRuns: PromotionRunAudit[];
 }
+
+export interface ImportPhaseStatus {
+  id: string;
+  name: string;
+  description: string;
+  startMonth: string;
+  endMonth: string;
+  totalMonths: number;
+  succeededMonths: number;
+  failedMonths: number;
+  queuedMonths: number;
+  runningMonths: number;
+  status: string;
+  canStart: boolean;
+  startBlocker?: string | null;
+}
+
+export interface ImportMonthJob {
+  id: string;
+  phaseId: string;
+  phaseName: string;
+  month: string;
+  from: string;
+  to: string;
+  status: string;
+  attempts: number;
+  startedAtUtc?: string | null;
+  completedAtUtc?: string | null;
+  exitCode?: number | null;
+}
+
+export interface ImportControlSnapshot {
+  generatedAtUtc: string;
+  isImportRunning: boolean;
+  runnerState: string;
+  activePhaseId?: string | null;
+  activeMonth?: string | null;
+  activeStartedAtUtc?: string | null;
+  activeProcessCount: number;
+  totalMonths: number;
+  succeededMonths: number;
+  failedMonths: number;
+  queuedMonths: number;
+  phases: ImportPhaseStatus[];
+  jobs: ImportMonthJob[];
+}
+
+export interface StartImportResponse {
+  phaseId: string;
+  processId: number;
+  message: string;
+}

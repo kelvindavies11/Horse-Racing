@@ -3,8 +3,10 @@ import type {
   CuratedEntityConnections,
   CuratedEntityPage,
   CuratedOverview,
+  ImportControlSnapshot,
   RaceResultsFeed,
   RelationshipGraph,
+  StartImportResponse,
 } from "../domain/curated";
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/api").replace(/\/$/, "");
@@ -24,6 +26,23 @@ const readJson = async <T>(path: string, signal?: AbortSignal): Promise<T> => {
 
   if (!response.ok) {
     throw new CuratedApiError(`The curated API returned ${response.status}.`, response.status);
+  }
+
+  return (await response.json()) as T;
+};
+
+const postJson = async <T>(path: string): Promise<T> => {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "X-Import-Control": "start",
+    },
+  });
+
+  if (!response.ok) {
+    const problem = await response.json().catch(() => undefined) as { detail?: string } | undefined;
+    throw new CuratedApiError(problem?.detail ?? `The import API returned ${response.status}.`, response.status);
   }
 
   return (await response.json()) as T;
@@ -62,5 +81,13 @@ export const curatedRepository = {
 
   getAudit(signal?: AbortSignal) {
     return readJson<AuditSnapshot>("/v1/admin/audit?limit=100", signal);
+  },
+
+  getImports(signal?: AbortSignal) {
+    return readJson<ImportControlSnapshot>("/v1/admin/imports", signal);
+  },
+
+  startImport(phaseId: string) {
+    return postJson<StartImportResponse>(`/v1/admin/imports/${encodeURIComponent(phaseId)}/start`);
   },
 };

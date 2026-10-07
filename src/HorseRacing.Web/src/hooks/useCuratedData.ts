@@ -4,6 +4,7 @@ import type {
   AuditSnapshot,
   CuratedEntityPage,
   CuratedOverview,
+  ImportControlSnapshot,
   RaceResultsFeed,
   RelationshipGraph,
 } from "../domain/curated";
@@ -134,6 +135,68 @@ export const useRaceResults = (active: boolean) => {
     data,
     error,
     isLoading,
+    reload: useCallback(() => setReloadKey((value) => value + 1), []),
+  };
+};
+
+export const useImportControl = (active: boolean) => {
+  const [reloadKey, setReloadKey] = useState(0);
+  const [data, setData] = useState<ImportControlSnapshot>();
+  const [error, setError] = useState<string>();
+  const [isLoading, setIsLoading] = useState(false);
+  const [startingPhaseId, setStartingPhaseId] = useState<string>();
+  const [actionMessage, setActionMessage] = useState<string>();
+
+  useEffect(() => {
+    if (!active) return;
+    const controller = new AbortController();
+    setIsLoading(true);
+    setError(undefined);
+    const load = () => curatedRepository
+      .getImports(controller.signal)
+      .then((value) => {
+        setData(value);
+        setError(undefined);
+        setIsLoading(false);
+      })
+      .catch((caught: unknown) => {
+        if (!controller.signal.aborted) {
+          setError(messageFor(caught));
+          setIsLoading(false);
+        }
+      });
+
+    void load();
+    const refreshInterval = window.setInterval(() => void load(), 5_000);
+    return () => {
+      window.clearInterval(refreshInterval);
+      controller.abort();
+    };
+  }, [active, reloadKey]);
+
+  const startPhase = useCallback(async (phaseId: string) => {
+    setStartingPhaseId(phaseId);
+    setActionMessage(undefined);
+    try {
+      const response = await curatedRepository.startImport(phaseId);
+      setActionMessage(response.message);
+      setReloadKey((value) => value + 1);
+      return true;
+    } catch (caught: unknown) {
+      setActionMessage(messageFor(caught));
+      return false;
+    } finally {
+      setStartingPhaseId(undefined);
+    }
+  }, []);
+
+  return {
+    data,
+    error,
+    isLoading,
+    startingPhaseId,
+    actionMessage,
+    startPhase,
     reload: useCallback(() => setReloadKey((value) => value + 1), []),
   };
 };

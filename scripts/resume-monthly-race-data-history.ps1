@@ -134,7 +134,8 @@ function Wait-ForExclusiveImportSlot {
             -not [string]::IsNullOrWhiteSpace($_.CommandLine) -and
             ($_.CommandLine -match 'HorseRacing\.RaceDataSync' -or
                 $_.CommandLine -match 'resume-after-throttle\.ps1' -or
-                $_.CommandLine -match 'resume-monthly-race-data-history\.ps1')
+                $_.CommandLine -match 'resume-monthly-race-data-history\.ps1' -or
+                $_.CommandLine -match 'resume-available-race-data-tail\.ps1')
         })
 
         if ($otherImports.Count -eq 0) {

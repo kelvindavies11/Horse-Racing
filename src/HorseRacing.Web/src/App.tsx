@@ -12,6 +12,7 @@ import type {
   CuratedEntityConnections,
   CuratedRaceResult,
   CuratedEntity,
+  ImportPhaseStatus,
   JsonValue,
   PromotionRunAudit,
   RawRunAudit,
@@ -20,9 +21,9 @@ import type {
   RunnerResultView,
 } from "./domain/curated";
 import { curatedRepository } from "./data/curatedRepository";
-import { useAudit, useCuratedData, useRaceCalendar, useRaceResults } from "./hooks/useCuratedData";
+import { useAudit, useCuratedData, useImportControl, useRaceCalendar, useRaceResults } from "./hooks/useCuratedData";
 
-type AppView = "results" | "calendar" | "explore" | "patterns" | "admin";
+type AppView = "results" | "calendar" | "explore" | "patterns" | "admin" | "imports";
 type AuditTab = "raw" | "curated";
 
 const Icon = ({ children, ...props }: SVGProps<SVGSVGElement> & { children: ReactNode }) => (
@@ -43,6 +44,7 @@ const ExternalIcon = () => <Icon><path d="M14 4h6v6M20 4l-9 9" /><path d="M18 13
 const ChevronIcon = ({ left = false }: { left?: boolean }) => <Icon className={left ? "chevron-left" : undefined}><path d="m9 18 6-6-6-6" /></Icon>;
 const TickIcon = () => <Icon><path d="m5 12 4 4L19 6" /></Icon>;
 const AlertIcon = () => <Icon><path d="M12 4 3 20h18L12 4Z" /><path d="M12 9v5m0 3h.01" /></Icon>;
+const QueueIcon = () => <Icon><path d="M5 5h14M5 12h10M5 19h7" /><circle cx="19" cy="12" r="2" /><path d="m17.5 17.5 3 3m0-3-3 3" /></Icon>;
 
 const number = new Intl.NumberFormat("en-GB");
 const dateTime = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/London" });
@@ -136,7 +138,7 @@ const shiftMonth = (month: string, offset: number) => {
 
 const currentView = (): AppView => {
   const value = window.location.hash.replace("#", "");
-  return value === "results" || value === "calendar" || value === "patterns" || value === "admin" ? value : "explore";
+  return value === "results" || value === "calendar" || value === "patterns" || value === "admin" || value === "imports" ? value : "explore";
 };
 
 function App() {
@@ -148,6 +150,7 @@ function App() {
   const deferredQuery = useDeferredValue(query);
   const curated = useCuratedData(type, deferredQuery, page);
   const audit = useAudit(view === "admin");
+  const imports = useImportControl(view === "imports");
   const results = useRaceResults(view === "results");
   const calendar = useRaceCalendar(view === "calendar");
 
@@ -159,6 +162,7 @@ function App() {
 
   const refresh = () => {
     if (view === "admin") audit.reload();
+    else if (view === "imports") imports.reload();
     else if (view === "calendar") calendar.reload();
     else if (view === "results") results.reload();
     else curated.reload();
@@ -170,7 +174,7 @@ function App() {
       <main className="main-content">
         <header className="topbar">
           <div className="mobile-brand"><span className="brand-mark">P</span><strong>Paddock</strong></div>
-          <div className="breadcrumb"><span>British racing</span><ChevronIcon /><strong>{view === "admin" ? "Job audit" : view}</strong></div>
+          <div className="breadcrumb"><span>British racing</span><ChevronIcon /><strong>{view === "admin" ? "Job audit" : view === "imports" ? "Import control" : view}</strong></div>
           <div className="topbar-actions"><span className="live-source"><i />Curated API</span><button className="icon-button" type="button" onClick={refresh} aria-label="Refresh data"><RefreshIcon /></button><span className="avatar" aria-label="Local user">KD</span></div>
         </header>
 
@@ -179,6 +183,7 @@ function App() {
         {view === "explore" && <ExplorerPage {...curated} type={type} query={query} page={page} onTypeChange={(value) => { setType(value); setPage(1); }} onQueryChange={(value) => { setQuery(value); setPage(1); }} onPageChange={setPage} onSelect={setSelectedEntity} />}
         {view === "patterns" && <PatternsPage graph={curated.relationships} isLoading={curated.isLoading} error={curated.error} onRetry={curated.reload} />}
         {view === "admin" && <AdminPage {...audit} />}
+        {view === "imports" && <ImportControlPage {...imports} />}
       </main>
       {selectedEntity && <EntityDrawer entity={selectedEntity} onNavigate={setSelectedEntity} onClose={() => setSelectedEntity(undefined)} />}
     </div>
@@ -196,6 +201,7 @@ const Sidebar = ({ view, onNavigate }: { view: AppView; onNavigate: (view: AppVi
       <button className={view === "patterns" ? "nav-item active" : "nav-item"} type="button" onClick={() => onNavigate("patterns")}><NodesIcon /><span>Patterns</span><small>04</small></button>
       <p className="nav-label nav-label--admin">Operations</p>
       <button className={view === "admin" ? "nav-item active" : "nav-item"} type="button" onClick={() => onNavigate("admin")}><ShieldIcon /><span>Admin audit</span><small>05</small></button>
+      <button className={view === "imports" ? "nav-item active" : "nav-item"} type="button" onClick={() => onNavigate("imports")}><QueueIcon /><span>Import control</span><small>06</small></button>
     </nav>
     <div className="sidebar-foot"><div className="layer-card"><span><DatabaseIcon /></span><div><strong>Curated layer</strong><small>Read-only · PostgreSQL</small></div></div><p>Source → Raw → Curated<br />Local pipeline / UK</p></div>
   </aside>
@@ -635,6 +641,140 @@ const Neighbourhood = ({ hub, neighbours }: { hub: RelationshipNode; neighbours:
   return <div className="neighbourhood"><div className="hub-focus" style={typeStyle(hub.type)}><span className="orbit orbit-one" /><span className="orbit orbit-two" /><i /><small>{hub.type}</small><strong>{hub.displayName}</strong><span>{neighbours.length} direct {neighbours.length === 1 ? "link" : "links"}</span></div><div className="neighbour-list">{pages.pageItems.map(({ node, label }) => <div className="neighbour" key={node.id} style={typeStyle(node.type)}><span className="link-line"><i /></span><span className="neighbour-dot" /><div><small>{label} · {node.type}</small><strong>{node.displayName}</strong></div></div>)}<Pagination current={pages.page} total={pages.totalPages} onChange={pages.setPage} label="Neighbour pages" compact /></div></div>;
 };
 
+const ImportControlPage = ({
+  data,
+  error,
+  isLoading,
+  startingPhaseId,
+  actionMessage,
+  startPhase,
+  reload,
+}: ReturnType<typeof useImportControl>) => {
+  const [phaseFilter, setPhaseFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [armedPhaseId, setArmedPhaseId] = useState<string>();
+  const filteredJobs = useMemo(() => (data?.jobs ?? []).filter((job) =>
+    (phaseFilter === "all" || job.phaseId === phaseFilter)
+    && (statusFilter === "all" || job.status === statusFilter)), [data?.jobs, phaseFilter, statusFilter]);
+  const queuePages = useClientPagination(filteredJobs, 12, `${phaseFilter}:${statusFilter}`);
+  const activePhase = data?.phases.find((phase) => phase.id === data.activePhaseId);
+
+  const requestStart = async (phase: ImportPhaseStatus) => {
+    if (armedPhaseId !== phase.id) {
+      setArmedPhaseId(phase.id);
+      return;
+    }
+
+    const started = await startPhase(phase.id);
+    if (started) setArmedPhaseId(undefined);
+  };
+
+  return <div className="page-wrap imports-page">
+    <section className="hero hero--imports">
+      <div><p className="kicker">Operations / guarded controls</p><h1>The queue,<br /><em>in plain sight.</em></h1></div>
+      <div className="hero-copy"><p>Watch every monthly runner move from queued to complete, then resume an eligible phase without opening a terminal.</p><span><i />One importer at a time · no force-stop control</span></div>
+    </section>
+    {isLoading && <PageSkeleton />}
+    {!isLoading && error && <ApiError message={error} onRetry={reload} />}
+    {!isLoading && data && <>
+      <section className={`runner-console runner-console--${data.runnerState.toLowerCase()}`} aria-label="Current import runner">
+        <div className="runner-pulse"><span /><i /><b /></div>
+        <div className="runner-copy">
+          <p className="kicker">Single-runner slot</p>
+          <h2>{data.isImportRunning ? activePhase?.name ?? "Import detected" : "Ready for dispatch"}</h2>
+          <p>{data.isImportRunning
+            ? data.activeMonth
+              ? `${calendarMonth.format(new Date(`${data.activeMonth}-01T00:00:00Z`))} is being collected, curated and weather-enriched.`
+              : "The resume process is waiting for its next safe attempt."
+            : "No BHA import process is active. An eligible phase can claim the slot."}</p>
+        </div>
+        <div className="runner-facts">
+          <span><small>State</small><strong>{data.runnerState}</strong></span>
+          <span><small>Started</small><strong>{data.activeStartedAtUtc ? formatDateTime(data.activeStartedAtUtc) : "—"}</strong></span>
+          <span><small>Protected processes</small><strong>{number.format(data.activeProcessCount)}</strong></span>
+        </div>
+      </section>
+
+      <section className="metric-strip import-metrics">
+        <Metric value={number.format(data.totalMonths)} label="Monthly runners" note="Across three fixed phases" index="01" />
+        <Metric value={number.format(data.succeededMonths)} label="Succeeded" note={`${Math.round((data.succeededMonths / data.totalMonths) * 100)}% of the archive`} index="02" />
+        <Metric value={number.format(data.failedMonths)} label="Need retry" note="Safe to resume by phase" index="03" />
+        <Metric value={number.format(data.queuedMonths)} label="Still queued" note="Future and untouched months" index="04" />
+      </section>
+
+      {actionMessage && <div className="import-action-message" role="status"><QueueIcon /><span>{actionMessage}</span></div>}
+
+      <section className="section-block phase-section">
+        <div className="section-heading"><div><p className="kicker">Fixed dispatch plan</p><h2>Import phases</h2></div><p>Controls call only the repository’s reviewed resume scripts. A second confirmation is required before dispatch.</p></div>
+        <div className="phase-grid">
+          {data.phases.map((phase, index) => <ImportPhaseCard
+            key={phase.id}
+            phase={phase}
+            index={index + 1}
+            armed={armedPhaseId === phase.id}
+            starting={startingPhaseId === phase.id}
+            onStart={() => void requestStart(phase)}
+            onCancel={() => setArmedPhaseId(undefined)}
+          />)}
+        </div>
+      </section>
+
+      <section className="section-block import-queue-section">
+        <div className="section-heading import-queue-heading">
+          <div><p className="kicker">144 monthly runners</p><h2>Dispatch queue</h2></div>
+          <div className="queue-filters">
+            <label><span>Phase</span><select value={phaseFilter} onChange={(event) => setPhaseFilter(event.target.value)}><option value="all">All phases</option>{data.phases.map((phase) => <option key={phase.id} value={phase.id}>{phase.name}</option>)}</select></label>
+            <label><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">All states</option><option value="Running">Running</option><option value="Succeeded">Succeeded</option><option value="Failed">Need retry</option><option value="Queued">Queued</option></select></label>
+          </div>
+        </div>
+        <div className="import-table" role="table" aria-label="Monthly import queue">
+          <div className="import-row import-row--head" role="row"><span>Runner</span><span>Phase</span><span>Status</span><span>Attempts</span><span>Started</span><span>Finished</span><span>Exit</span></div>
+          {queuePages.pageItems.map((job) => <div className={`import-row import-row--${job.status.toLowerCase().replace(" ", "-")}`} role="row" key={job.id}>
+            <span><strong>{calendarMonth.format(new Date(`${job.month}-01T00:00:00Z`))}</strong><small>{job.from} → {job.to}</small></span>
+            <span>{job.phaseName}</span>
+            <span><Outcome value={job.status} /></span>
+            <span>{number.format(job.attempts)}</span>
+            <span>{job.startedAtUtc ? formatDateTime(job.startedAtUtc) : "—"}</span>
+            <span>{job.completedAtUtc ? formatDateTime(job.completedAtUtc) : "—"}</span>
+            <span>{job.exitCode ?? "—"}</span>
+          </div>)}
+          {filteredJobs.length === 0 && <div className="queue-empty"><QueueIcon /><strong>No runners match these filters.</strong></div>}
+        </div>
+        <Pagination current={queuePages.page} total={queuePages.totalPages} onChange={queuePages.setPage} label="Import queue pages" />
+      </section>
+    </>}
+  </div>;
+};
+
+const ImportPhaseCard = ({
+  phase,
+  index,
+  armed,
+  starting,
+  onStart,
+  onCancel,
+}: {
+  phase: ImportPhaseStatus;
+  index: number;
+  armed: boolean;
+  starting: boolean;
+  onStart: () => void;
+  onCancel: () => void;
+}) => {
+  const progress = phase.totalMonths === 0 ? 0 : Math.round((phase.succeededMonths / phase.totalMonths) * 100);
+  const progressStyle = { "--phase-progress": `${progress}%` } as CSSProperties;
+  return <article className={`phase-card phase-card--${phase.status.toLowerCase().replace(" ", "-")}`} style={progressStyle}>
+    <div className="phase-card-top"><span className="phase-index">0{index}</span><Outcome value={phase.status} /></div>
+    <h3>{phase.name}</h3>
+    <p>{phase.description}</p>
+    <div className="phase-range"><span>{phase.startMonth}</span><i /><span>{phase.endMonth}</span></div>
+    <div className="phase-progress"><span><i /></span><small>{phase.succeededMonths} / {phase.totalMonths} succeeded · {progress}%</small></div>
+    <div className="phase-counts"><span><strong>{phase.failedMonths}</strong> retry</span><span><strong>{phase.queuedMonths}</strong> queued</span><span><strong>{phase.runningMonths}</strong> running</span></div>
+    {armed ? <div className="phase-confirm" role="group" aria-label={`Confirm ${phase.name}`}><p>This will claim the single-runner slot and refresh the public BHA token.</p><button type="button" onClick={onStart} disabled={starting}>{starting ? "Starting…" : "Confirm dispatch"}</button><button type="button" onClick={onCancel}>Cancel</button></div> : <button className="phase-start" type="button" onClick={onStart} disabled={!phase.canStart || starting}>{starting ? "Starting…" : phase.failedMonths > 0 ? "Resume & retry" : "Start phase"}<ArrowIcon /></button>}
+    {!armed && phase.startBlocker && <small className="phase-blocker">{phase.startBlocker}</small>}
+  </article>;
+};
+
 const AdminPage = ({ data, error, isLoading, reload }: { data?: AuditSnapshot; error?: string; isLoading: boolean; reload: () => void }) => {
   const [tab, setTab] = useState<AuditTab>("raw");
   const runningJobs = data
@@ -657,7 +797,7 @@ const PromotionAuditTable = ({ runs }: { runs: PromotionRunAudit[] }) => {
   return <><div className="audit-table" role="table" aria-label="Curated promotion runs"><div className="audit-row audit-row--head" role="row"><span>Status</span><span>Job / source</span><span>Started</span><span>Finished</span><span>Duration</span><span>Found</span><span>Upserted</span></div>{pages.pageItems.map((run) => <div className="audit-row" role="row" key={run.id}><span><Outcome value={run.outcome} /></span><span className="job-cell"><strong>{run.jobName}</strong><small>{run.sourceJobName} · v{run.promoterVersion}</small>{run.errorMessage && <em>{run.errorCode}: {run.errorMessage}</em>}</span><span>{formatDateTime(run.startedAtUtc)}</span><span>{run.completedAtUtc ? formatDateTime(run.completedAtUtc) : <strong className="in-progress">In progress</strong>}</span><span>{formatDuration(run.startedAtUtc, run.completedAtUtc)}</span><span>{number.format(run.recordsFound)}<small>records</small></span><span>{number.format(run.recordsUpserted)}<small>records</small></span></div>)}</div><Pagination current={pages.page} total={pages.totalPages} onChange={pages.setPage} label="Curated audit pages" /></>;
 };
 
-const Outcome = ({ value }: { value: string }) => <span className={`outcome outcome--${value.toLowerCase()}`}><i />{value === "Running" ? "In progress" : value}</span>;
+const Outcome = ({ value }: { value: string }) => <span className={`outcome outcome--${value.toLowerCase().replace(/\s+/g, "-")}`}><i />{value === "Running" ? "In progress" : value}</span>;
 const AuditEmpty = ({ layer }: { layer: string }) => <div className="audit-empty"><ShieldIcon /><h3>No {layer.toLowerCase()} runs yet</h3><p>The ledger will populate after the corresponding local job has run.</p></div>;
 const Pagination = ({ current, total, onChange, label = "Data pages", compact = false }: { current: number; total: number; onChange: (page: number) => void; label?: string; compact?: boolean }) => total <= 1 ? null : <nav className={compact ? "pagination pagination--compact" : "pagination"} aria-label={label}><button type="button" disabled={current <= 1} onClick={() => onChange(current - 1)}><ChevronIcon left /><span>Previous</span></button><span>Page <strong>{current}</strong> of {total}</span><button type="button" disabled={current >= total} onClick={() => onChange(current + 1)}><span>Next</span><ChevronIcon /></button></nav>;
 

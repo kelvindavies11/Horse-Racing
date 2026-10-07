@@ -8,6 +8,7 @@ import type {
   CuratedEntityConnections,
   CuratedEntityPage,
   CuratedOverview,
+  ImportControlSnapshot,
   RaceResultsFeed,
   RelationshipGraph,
 } from "./domain/curated";
@@ -211,6 +212,83 @@ const raceResults: RaceResultsFeed = {
   }],
 };
 
+const imports: ImportControlSnapshot = {
+  generatedAtUtc: "2026-10-07T17:50:00Z",
+  isImportRunning: true,
+  runnerState: "Running",
+  activePhaseId: "five-year",
+  activeMonth: "2022-12",
+  activeStartedAtUtc: "2026-10-07T17:30:00Z",
+  activeProcessCount: 2,
+  totalMonths: 144,
+  succeededMonths: 2,
+  failedMonths: 12,
+  queuedMonths: 129,
+  phases: [{
+    id: "five-year",
+    name: "Five-year results",
+    description: "The recent history pass currently feeding the local site.",
+    startMonth: "2021-10",
+    endMonth: "2026-09",
+    totalMonths: 60,
+    succeededMonths: 2,
+    failedMonths: 12,
+    queuedMonths: 45,
+    runningMonths: 1,
+    status: "Running",
+    canStart: false,
+    startBlocker: "Another import owns the single-runner slot.",
+  }, {
+    id: "year-end",
+    name: "2026 live tail",
+    description: "A rolling pass refreshed as results become available.",
+    startMonth: "2026-10",
+    endMonth: "2026-12",
+    totalMonths: 3,
+    succeededMonths: 0,
+    failedMonths: 0,
+    queuedMonths: 3,
+    runningMonths: 0,
+    status: "Queued",
+    canStart: false,
+    startBlocker: "The five-year phase must finish first.",
+  }, {
+    id: "historical",
+    name: "Historical archive",
+    description: "The earlier monthly archive.",
+    startMonth: "2015-01",
+    endMonth: "2021-09",
+    totalMonths: 81,
+    succeededMonths: 0,
+    failedMonths: 0,
+    queuedMonths: 81,
+    runningMonths: 0,
+    status: "Queued",
+    canStart: false,
+    startBlocker: "The five-year phase must finish first.",
+  }],
+  jobs: [{
+    id: "five-year:2022-12",
+    phaseId: "five-year",
+    phaseName: "Five-year results",
+    month: "2022-12",
+    from: "2022-12-01",
+    to: "2022-12-31",
+    status: "Running",
+    attempts: 0,
+    startedAtUtc: "2026-10-07T17:30:00Z",
+  }, {
+    id: "historical:2015-01",
+    phaseId: "historical",
+    phaseName: "Historical archive",
+    month: "2015-01",
+    from: "2015-01-01",
+    to: "2015-01-31",
+    status: "Queued",
+    attempts: 0,
+  }],
+};
+
 const entityConnections = (entity: CuratedEntity): CuratedEntityConnections => ({
   generatedAtUtc: "2026-10-06T09:00:00Z",
   entity,
@@ -233,6 +311,7 @@ beforeEach(() => {
     if (url.pathname.endsWith("/curated/relationships")) return json(relationships);
     if (url.pathname.endsWith("/curated/results")) return json(raceResults);
     if (url.pathname.endsWith("/admin/audit")) return json(audit);
+    if (url.pathname.endsWith("/admin/imports")) return json(imports);
     if (url.pathname.includes("/curated/entities/") && url.pathname.endsWith("/connections")) {
       const entityId = url.pathname.split("/").at(-2);
       const entity = entities.find((candidate) => candidate.id === entityId) ?? entities[0];
@@ -337,6 +416,19 @@ describe("curated data workspace", () => {
     expect(within(detail).getByText("17.6°")).toBeInTheDocument();
     expect(within(detail).getByText("52.9548, -1.1270")).toBeInTheDocument();
     expect(within(detail).getByRole("table", { name: /Finishing order/i })).toBeInTheDocument();
+  });
+
+  it("shows a separate guarded import queue without enabling duplicate runners", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole("heading", { name: "Observed records" });
+    await user.click(screen.getByRole("button", { name: /Import control/i }));
+
+    expect(await screen.findByRole("heading", { level: 2, name: "Five-year results" })).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Monthly import queue" })).toBeInTheDocument();
+    expect(screen.getByText("December 2022")).toBeInTheDocument();
+    expect(screen.getByText("Protected processes")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Resume & retry" })).toBeDisabled();
   });
 
   it("navigates a calendar meeting through race tabs and complete runner details", async () => {
