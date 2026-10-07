@@ -40,9 +40,7 @@ public sealed class BhaCuratedDomainObjectExtractor : ICuratedRawPayloadExtracto
 
         var records = FindRecordElements(document.RootElement);
         var candidates = records
-            .Select(record => TryCreateCandidate(payload, domainObjectType, record))
-            .Where(candidate => candidate is not null)
-            .Select(candidate => candidate!)
+            .SelectMany(record => CreateCandidates(payload, domainObjectType, record))
             .ToList();
 
         return CuratedRawPayloadExtraction.Succeeded(candidates);
@@ -308,11 +306,155 @@ public sealed class BhaCuratedDomainObjectExtractor : ICuratedRawPayloadExtracto
             BuildSourceDataJson(domainObjectType, sourceKey, displayName, record));
     }
 
+    private static IEnumerable<CuratedDomainObjectCandidate> CreateCandidates(
+        RawPayloadForPromotion payload,
+        string domainObjectType,
+        JsonElement record)
+    {
+        var primaryCandidate = TryCreateCandidate(payload, domainObjectType, record);
+        if (primaryCandidate is not null)
+        {
+            yield return primaryCandidate;
+        }
+
+        if (domainObjectType != "RunnerResult")
+        {
+            yield break;
+        }
+
+        var horse = TryCreateRelatedCandidate(
+            payload,
+            record,
+            "Horse",
+            ["animalId", "horseId", "racehorseId"],
+            ["racehorseName", "horseName"],
+            ["animalId", "racehorseName"]);
+        if (horse is not null)
+        {
+            yield return horse;
+        }
+
+        var jockey = TryCreateRelatedCandidate(
+            payload,
+            record,
+            "Jockey",
+            ["jockeyId"],
+            ["jockeyName"],
+            ["jockeyId", "jockeyName", "jockeyLicenceType"]);
+        if (jockey is not null)
+        {
+            yield return jockey;
+        }
+
+        var trainer = TryCreateRelatedCandidate(
+            payload,
+            record,
+            "Trainer",
+            ["trainerId"],
+            ["trainerName"],
+            ["trainerId", "trainerName"]);
+        if (trainer is not null)
+        {
+            yield return trainer;
+        }
+
+        var owner = TryCreateRelatedCandidate(
+            payload,
+            record,
+            "Owner",
+            ["ownerId"],
+            ["ownerName"],
+            ["ownerId", "ownerName"]);
+        if (owner is not null)
+        {
+            yield return owner;
+        }
+
+        var stable = TryCreateTrainerStableCandidate(payload, record);
+        if (stable is not null)
+        {
+            yield return stable;
+        }
+    }
+
+    private static CuratedDomainObjectCandidate? TryCreateRelatedCandidate(
+        RawPayloadForPromotion payload,
+        JsonElement record,
+        string domainObjectType,
+        string[] sourceKeyFields,
+        string[] displayNameFields,
+        string[] projectedFields)
+    {
+        var sourceKeyValue = GetFirstScalar(record, sourceKeyFields);
+        var displayNameValue = GetFirstScalar(record, displayNameFields);
+        if (string.IsNullOrWhiteSpace(sourceKeyValue) || string.IsNullOrWhiteSpace(displayNameValue))
+        {
+            return null;
+        }
+
+        var sourceKey = BoundSourceKey(sourceKeyValue);
+        var displayName = Truncate(displayNameValue, 500);
+        var foundData = ProjectFoundData(record, projectedFields);
+        foundData["derivedFromResult"] = true;
+
+        return new CuratedDomainObjectCandidate(
+            "BHA",
+            domainObjectType,
+            sourceKey,
+            displayName,
+            payload.SourceUri,
+            payload.RetrievedAtUtc,
+            BuildSourceDataJson(domainObjectType, sourceKey, displayName, foundData));
+    }
+
+    private static CuratedDomainObjectCandidate? TryCreateTrainerStableCandidate(
+        RawPayloadForPromotion payload,
+        JsonElement record)
+    {
+        var trainerId = GetFirstScalar(record, ["trainerId"]);
+        var trainerName = GetFirstScalar(record, ["trainerName"]);
+        if (string.IsNullOrWhiteSpace(trainerId) || string.IsNullOrWhiteSpace(trainerName))
+        {
+            return null;
+        }
+
+        var sourceKey = BoundSourceKey(trainerId);
+        var displayName = Truncate($"Stable of {trainerName}", 500);
+        var foundData = ProjectFoundData(record, ["trainerId", "trainerName"]);
+        foundData["stableName"] = displayName;
+        foundData["derivedFromResult"] = true;
+        foundData["identityBasis"] =
+            "Derived from the result's trainer attribution; the BHA result does not provide an official stable name or location.";
+
+        return new CuratedDomainObjectCandidate(
+            "BHA",
+            "Stable",
+            sourceKey,
+            displayName,
+            payload.SourceUri,
+            payload.RetrievedAtUtc,
+            BuildSourceDataJson("Stable", sourceKey, displayName, foundData));
+    }
+
+    private static JsonObject ProjectFoundData(JsonElement record, IEnumerable<string> propertyNames)
+    {
+        var foundData = new JsonObject();
+        foreach (var propertyName in propertyNames)
+        {
+            if (TryGetProperty(record, propertyName, out var value))
+            {
+                foundData[propertyName] = JsonNode.Parse(value.GetRawText());
+            }
+        }
+
+        return foundData;
+    }
+
     private static string[] GetSourceKeyFields(string domainObjectType) =>
         domainObjectType switch
         {
             "Racecourse" => ["racecourseId", "courseId", "racecourseCode", "courseCode", "id", "name", "courseName"],
-            "Horse" => ["horseId", "racehorseId", "id", "horseName", "name"],
+            "Horse" => ["animalId", "horseId", "racehorseId", "id", "racehorseName", "horseName", "name"],
             "Jockey" => ["jockeyId", "entryId", "id", "jockeyName", "name", "entryName"],
             "Trainer" => ["trainerId", "entryId", "id", "trainerName", "name", "entryName"],
             "Owner" => ["ownerId", "entryId", "id", "ownerName", "name", "entryName"],
@@ -330,7 +472,7 @@ public sealed class BhaCuratedDomainObjectExtractor : ICuratedRawPayloadExtracto
         domainObjectType switch
         {
             "Racecourse" => ["courseName", "racecourseName", "name"],
-            "Horse" => ["horseName", "name"],
+            "Horse" => ["racehorseName", "horseName", "name"],
             "Jockey" => ["jockeyName", "name", "entryName"],
             "Trainer" => ["trainerName", "name", "entryName"],
             "Owner" => ["ownerName", "displayName", "name", "entryName"],
@@ -428,6 +570,15 @@ public sealed class BhaCuratedDomainObjectExtractor : ICuratedRawPayloadExtracto
         JsonElement record)
     {
         var foundData = JsonNode.Parse(record.GetRawText()) ?? new JsonObject();
+        return BuildSourceDataJson(domainObjectType, sourceKey, displayName, foundData);
+    }
+
+    private static string BuildSourceDataJson(
+        string domainObjectType,
+        string sourceKey,
+        string displayName,
+        JsonNode foundData)
+    {
         var wrapper = new JsonObject
         {
             ["sourceSystem"] = "BHA",

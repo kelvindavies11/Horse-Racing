@@ -165,7 +165,7 @@ const ResultsPage = ({ data, error, isLoading, reload }: ReturnType<typeof useRa
     {!isLoading && data && <>
       <section className="metric-strip result-metrics"><Metric value={number.format(data.totalRaces)} label="Completed races" note={`${data.fromDate} — ${data.toDate}`} index="01" /><Metric value={number.format(data.totalRunners)} label="Declared runners" note="Finishers and non-runners" index="02" /><Metric value={`${data.totalRaces === 0 ? 0 : Math.round((data.weatherEnrichedRaces / data.totalRaces) * 100)}%`} label="Weather coverage" note={`${data.weatherEnrichedRaces} race-time observations`} index="03" /></section>
       {data.items.length === 0 ? <EmptyResults /> : <section className="section-block results-section">
-        <div className="section-heading results-heading"><div><p className="kicker">Last completed week</p><h2>Results ledger</h2></div><label className="search-box result-search"><SearchIcon /><span className="sr-only">Search race results</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Course, race or winner" /></label></div>
+        <div className="section-heading results-heading"><div><p className="kicker">Latest available week</p><h2>Results ledger</h2></div><label className="search-box result-search"><SearchIcon /><span className="sr-only">Search race results</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Course, race or winner" /></label></div>
         {filtered.length === 0 ? <NoResultMatches onClear={() => setSearch("")} /> : <div className="results-layout">
           <div className="race-result-list" aria-label="Race results">
             {filtered.map((race) => <RaceResultListItem key={race.id} race={race} selected={race.id === selected?.id} onSelect={() => setSelectedId(race.id)} />)}
@@ -204,7 +204,7 @@ const weatherLabel = (code: number) => {
   return "Storms";
 };
 
-const EmptyResults = () => <section className="empty-collection"><span><TrophyIcon /></span><p className="kicker">Result layer is ready</p><h2>No completed races in this window.</h2><p>Run the last-week synchronisation to collect BHA results, promote the records and attach race-time weather.</p><code>dotnet run --project src/HorseRacing.RaceDataSync</code></section>;
+const EmptyResults = () => <section className="empty-collection"><span><TrophyIcon /></span><p className="kicker">Result layer is ready</p><h2>No completed races have been imported yet.</h2><p>Run the results synchronisation to collect BHA results, promote the records and attach race-time weather.</p><code>dotnet run --project src/HorseRacing.RaceDataSync</code></section>;
 const NoResultMatches = ({ onClear }: { onClear: () => void }) => <div className="no-matches"><SearchIcon /><h3>No race results match</h3><p>Try another course, race name or winner.</p><button type="button" onClick={onClear}>Clear search</button></div>;
 
 interface ExplorerPageProps {

@@ -42,7 +42,11 @@ public static class CuratedReadEndpoints
                 ICuratedReadRepository repository,
                 CancellationToken cancellationToken) =>
             {
-                var end = to ?? DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1);
+                var end = to
+                    ?? (from is not null
+                        ? from.Value.AddDays(6)
+                        : await repository.GetLatestRaceDateAsync(cancellationToken)
+                            ?? DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1));
                 var start = from ?? end.AddDays(-6);
                 if (end < start || end.DayNumber - start.DayNumber > 31)
                 {

@@ -12,6 +12,8 @@ public interface ICuratedReadRepository
         int limit,
         CancellationToken cancellationToken);
 
+    Task<DateOnly?> GetLatestRaceDateAsync(CancellationToken cancellationToken);
+
     Task<RaceResultsFeed> GetRaceResultsAsync(
         DateOnly fromDate,
         DateOnly toDate,

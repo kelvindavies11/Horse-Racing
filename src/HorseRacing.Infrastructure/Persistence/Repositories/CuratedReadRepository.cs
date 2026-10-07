@@ -271,6 +271,45 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
             ordered);
     }
 
+    public async Task<DateOnly?> GetLatestRaceDateAsync(CancellationToken cancellationToken)
+    {
+        var rows = await dbContext.CuratedDomainObjects
+            .AsNoTracking()
+            .Where(item => item.DomainObjectType == "Meeting"
+                || item.DomainObjectType == "Race"
+                || item.DomainObjectType == "RunnerResult")
+            .Select(item => new ResultSourceRow(
+                item.Id,
+                item.DomainObjectType,
+                item.SourceKey,
+                item.DisplayName,
+                item.SourceUrl,
+                item.SourceDataJson))
+            .ToListAsync(cancellationToken);
+
+        var meetingKeys = rows
+            .Where(row => row.Type == "Meeting")
+            .Select(ParseResultMeeting)
+            .Where(item => item is not null)
+            .Select(item => (item!.FixtureYear, item.FixtureId))
+            .ToHashSet();
+        var runnerKeys = rows
+            .Where(row => row.Type == "RunnerResult")
+            .Select(ParseRunnerResult)
+            .Where(item => item is not null)
+            .Select(item => (item!.RaceYear, item.RaceId, item.DivisionSequence))
+            .ToHashSet();
+
+        return rows
+            .Where(row => row.Type == "Race")
+            .Select(ParseResultRace)
+            .Where(item => item is not null
+                && meetingKeys.Contains((item.FixtureYear, item.FixtureId))
+                && runnerKeys.Contains((item.RaceYear, item.RaceId, item.DivisionSequence)))
+            .Select(item => (DateOnly?)item!.LocalDate)
+            .Max();
+    }
+
     public async Task<AuditSnapshot> GetAuditAsync(
         int limit,
         CancellationToken cancellationToken)

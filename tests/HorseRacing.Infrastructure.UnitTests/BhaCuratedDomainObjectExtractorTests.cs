@@ -125,9 +125,36 @@ public sealed class BhaCuratedDomainObjectExtractorTests
         Assert.Equal(("Meeting", "2026:101"), (meeting.DomainObjectType, meeting.SourceKey));
         Assert.Equal(("Race", "2026:202:1"), (race.DomainObjectType, race.SourceKey));
         Assert.Collection(
-            runners.OrderBy(candidate => candidate.SourceKey),
+            runners.OrderBy(candidate => candidate.DomainObjectType).ThenBy(candidate => candidate.SourceKey),
+            candidate => Assert.Equal(("Horse", "301", "First Horse"), (candidate.DomainObjectType, candidate.SourceKey, candidate.DisplayName)),
+            candidate => Assert.Equal(("Horse", "302", "Second Horse"), (candidate.DomainObjectType, candidate.SourceKey, candidate.DisplayName)),
             candidate => Assert.Equal(("RunnerResult", "2026:202:1:301", "First Horse"), (candidate.DomainObjectType, candidate.SourceKey, candidate.DisplayName)),
             candidate => Assert.Equal(("RunnerResult", "2026:202:1:302", "Second Horse"), (candidate.DomainObjectType, candidate.SourceKey, candidate.DisplayName)));
+    }
+
+    [Fact]
+    public void Historical_runner_results_materialise_embedded_participants_and_a_transparent_stable_identity()
+    {
+        var extractor = new BhaCuratedDomainObjectExtractor();
+
+        var result = extractor.Extract(CreatePayload(
+            "bha-results-runners-2026-202-1",
+            "https://api09.horseracing.software/bha/v1/races/2026/202/1/results",
+            """{"data":[{"yearOfRace":2026,"raceId":202,"divisionSequence":1,"animalId":301,"racehorseName":"First Horse","jockeyId":401,"jockeyName":"A Rider","jockeyLicenceType":"Professional","trainerId":501,"trainerName":"A Trainer","ownerId":601,"ownerName":"An Owner"}]}"""));
+
+        Assert.Equal(CuratedPromotionOutcome.Succeeded, result.Outcome);
+        var candidates = result.DomainObjects.ToDictionary(candidate => candidate.DomainObjectType);
+        Assert.Equal(6, candidates.Count);
+        Assert.Equal(("301", "First Horse"), (candidates["Horse"].SourceKey, candidates["Horse"].DisplayName));
+        Assert.Equal(("401", "A Rider"), (candidates["Jockey"].SourceKey, candidates["Jockey"].DisplayName));
+        Assert.Equal(("501", "A Trainer"), (candidates["Trainer"].SourceKey, candidates["Trainer"].DisplayName));
+        Assert.Equal(("601", "An Owner"), (candidates["Owner"].SourceKey, candidates["Owner"].DisplayName));
+        Assert.Equal(("501", "Stable of A Trainer"), (candidates["Stable"].SourceKey, candidates["Stable"].DisplayName));
+
+        using var stableSourceData = JsonDocument.Parse(candidates["Stable"].SourceDataJson);
+        var stableData = stableSourceData.RootElement.GetProperty("foundData");
+        Assert.True(stableData.GetProperty("derivedFromResult").GetBoolean());
+        Assert.Contains("does not provide an official stable name", stableData.GetProperty("identityBasis").GetString());
     }
 
     private static RawPayloadForPromotion CreatePayload(

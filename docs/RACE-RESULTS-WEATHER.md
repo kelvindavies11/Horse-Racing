@@ -5,7 +5,7 @@ The `HorseRacing.RaceDataSync` console job collects a bounded historical date ra
 ## Data sources and decisions
 
 - BHA result fixtures identify meetings with results. Each fixture is expanded to races and each race to its runner result rows. The BHA course list supplies course name, postcode and WGS84 coordinates.
-- Source identities are `fixtureYear:fixtureId` for meetings, `yearOfRace:raceId:divisionSequence` for races, and `yearOfRace:raceId:divisionSequence:animalId` for runner results. This prevents runners in one race from overwriting each other.
+- Source identities are `fixtureYear:fixtureId` for meetings, `yearOfRace:raceId:divisionSequence` for races, and `yearOfRace:raceId:divisionSequence:animalId` for runner results. This prevents runners in one race from overwriting each other. The embedded horse, jockey, trainer and owner identities are also materialized for Explore. Because result rows do not expose an official stable name or location, a transparent `Stable of {trainer}` identity is derived from each trainer attribution and marked as derived in its Curated data.
 - BHA coordinates are preferred because they share the same audited source hierarchy as the race. Open-Meteo's GeoNames-backed GB geocoding endpoint is used only when BHA coordinates are missing.
 - Historical weather comes from the free Open-Meteo archive API. One response is captured per course and local calendar day, using `Europe/London`; the observation for the local hour containing the advertised race time is persisted. This is hourly historical weather, not a claim that a sensor was physically located at the course.
 - BHA and Open-Meteo responses, including failures, use the existing Raw payload/run audit. External bearer tokens are operator configuration and are never stored in source control or returned to the browser.
@@ -31,7 +31,15 @@ The result flow is safe to rerun: Raw attempts remain immutable, promotion upser
 
 ## API and website
 
-`GET /api/v1/curated/results?from=YYYY-MM-DD&to=YYYY-MM-DD` returns an inclusive range of up to 32 days. Omitting dates selects the last seven completed dates. Each race contains its meeting/course context, ordered finishers and non-runners, declared winner, location provenance and race-hour weather when available.
+`GET /api/v1/curated/results?from=YYYY-MM-DD&to=YYYY-MM-DD` returns an inclusive range of up to 32 days. Omitting dates selects the seven-day window ending on the latest race that has both meeting context and runner results in Curated, so a historical or actively importing local copy opens with populated results. Each race contains its meeting/course context, ordered finishers and non-runners, declared winner, location provenance and race-hour weather when available.
+
+After upgrading an existing local database, materialize participant identities from result rows that were promoted by an older build:
+
+```powershell
+./scripts/backfill-curated-result-participants.ps1
+```
+
+The backfill is idempotent, preserves Raw payload and promotion lineage, and does not call or interrupt any Raw source job. Direct participant records are left unchanged; only result-derived records are refreshed.
 
 The website's **Results** workspace provides search, race selection, winner and race facts, course coordinates/postcode, weather, and the full finishing order. **Explore** remains the generic Curated entity and inferred-pattern workspace. **Admin audit** exposes the Raw result/weather jobs and Curated promotions without exposing response bytes or credentials.
 
