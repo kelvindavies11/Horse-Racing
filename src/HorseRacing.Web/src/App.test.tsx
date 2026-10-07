@@ -46,12 +46,19 @@ const entities: CuratedEntity[] = [
 const overview: CuratedOverview = {
   generatedAtUtc: "2026-10-06T09:00:00Z",
   totalEntities: 2,
-  totalEntityTypes: 2,
+  totalEntityTypes: 9,
   firstObservedAtUtc: "2026-10-05T09:00:00Z",
   lastObservedAtUtc: "2026-10-06T08:30:00Z",
   entityTypes: [
     { type: "Horse", count: 1, lastObservedAtUtc: "2026-10-06T08:30:00Z" },
     { type: "Racecourse", count: 1, lastObservedAtUtc: "2026-10-06T08:00:00Z" },
+    { type: "Jockey", count: 1, lastObservedAtUtc: "2026-10-06T08:00:00Z" },
+    { type: "Trainer", count: 1, lastObservedAtUtc: "2026-10-06T08:00:00Z" },
+    { type: "Owner", count: 1, lastObservedAtUtc: "2026-10-06T08:00:00Z" },
+    { type: "Stable", count: 1, lastObservedAtUtc: "2026-10-06T08:00:00Z" },
+    { type: "Meeting", count: 1, lastObservedAtUtc: "2026-10-06T08:00:00Z" },
+    { type: "Race", count: 1, lastObservedAtUtc: "2026-10-06T08:00:00Z" },
+    { type: "RunnerResult", count: 1, lastObservedAtUtc: "2026-10-06T08:00:00Z" },
   ],
 };
 
@@ -254,11 +261,24 @@ describe("curated data workspace", () => {
     await screen.findByRole("heading", { name: "Observed records" });
     await user.click(screen.getAllByTestId("entity-card")[0]);
     const dialog = screen.getByRole("dialog", { name: "Ascot details" });
+    expect(dialog).toHaveClass("entity-modal");
+    expect(dialog).toHaveAttribute("data-testid", "entity-fullscreen-modal");
+    expect(within(dialog).getByText("Record atlas")).toBeInTheDocument();
     expect(within(dialog).getByText("Observation & lineage")).toBeInTheDocument();
     expect(within(dialog).getByText("Raw payload")).toBeInTheDocument();
     expect(within(dialog).getByRole("link", { name: /Original source/i })).toHaveAttribute("href", entities[0].sourceUrl);
     await user.click(await within(dialog).findByRole("button", { name: /Northern Signal/i }));
     expect(screen.getByRole("dialog", { name: "Northern Signal details" })).toBeInTheDocument();
+  });
+
+  it("paginates data grids without hiding later records", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole("heading", { name: "Observed records" });
+    const pages = screen.getByRole("navigation", { name: "Entity family pages" });
+    expect(screen.queryByRole("button", { name: "RunnerResult1" })).not.toBeInTheDocument();
+    await user.click(within(pages).getByRole("button", { name: /Next/i }));
+    expect(screen.getByRole("button", { name: "RunnerResult1" })).toBeInTheDocument();
   });
 
   it("shows inferred patterns and the admin job audit", async () => {

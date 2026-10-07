@@ -81,6 +81,18 @@ const typePalette = ["#df4c33", "#4263eb", "#14866d", "#8a5cf6", "#c88405", "#d6
 const typeColour = (value: string) => typePalette[[...value].reduce((total, character) => total + character.charCodeAt(0), 0) % typePalette.length];
 const typeStyle = (type: string) => ({ "--entity-colour": typeColour(type) }) as CSSProperties;
 
+const useClientPagination = <T,>(items: readonly T[], pageSize: number, resetKey?: unknown) => {
+  const [requestedPage, setRequestedPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const page = Math.min(requestedPage, totalPages);
+  const pageItems = useMemo(() => items.slice((page - 1) * pageSize, page * pageSize), [items, page, pageSize]);
+
+  useEffect(() => setRequestedPage((current) => Math.min(current, totalPages)), [totalPages]);
+  useEffect(() => setRequestedPage(1), [resetKey]);
+
+  return { page, pageItems, totalPages, setPage: setRequestedPage };
+};
+
 const londonDateKey = (value: string) => {
   const parts = new Intl.DateTimeFormat("en-GB", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: "Europe/London" }).formatToParts(new Date(value));
   const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? "";
@@ -170,14 +182,15 @@ const ResultsPage = ({ data, error, isLoading, reload }: ReturnType<typeof useRa
       || race.courseName.toLowerCase().includes(query)
       || race.winner?.toLowerCase().includes(query));
   }, [data, search]);
+  const resultPages = useClientPagination(filtered, 8, search);
   const [selectedId, setSelectedId] = useState<string>();
-  const selected = filtered.find((race) => race.id === selectedId) ?? filtered[0];
+  const selected = resultPages.pageItems.find((race) => race.id === selectedId) ?? resultPages.pageItems[0];
 
   useEffect(() => {
-    if (filtered.length > 0 && !filtered.some((race) => race.id === selectedId)) {
-      setSelectedId(filtered[0].id);
+    if (resultPages.pageItems.length > 0 && !resultPages.pageItems.some((race) => race.id === selectedId)) {
+      setSelectedId(resultPages.pageItems[0].id);
     }
-  }, [filtered, selectedId]);
+  }, [resultPages.pageItems, selectedId]);
 
   return <div className="page-wrap results-page">
     <section className="hero hero--results"><div><p className="kicker">Official result data / race context</p><h1>The finish,<br /><em>in context.</em></h1></div><div className="hero-copy"><p>Read the finishing order beside the course, going and hourly weather observed at the scheduled start.</p><span><i />BHA results · Open-Meteo history</span></div></section>
@@ -188,8 +201,11 @@ const ResultsPage = ({ data, error, isLoading, reload }: ReturnType<typeof useRa
       {data.items.length === 0 ? <EmptyResults /> : <section className="section-block results-section">
         <div className="section-heading results-heading"><div><p className="kicker">Latest available week</p><h2>Results ledger</h2></div><label className="search-box result-search"><SearchIcon /><span className="sr-only">Search race results</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Course, race or winner" /></label></div>
         {filtered.length === 0 ? <NoResultMatches onClear={() => setSearch("")} /> : <div className="results-layout">
-          <div className="race-result-list" aria-label="Race results">
-            {filtered.map((race) => <RaceResultListItem key={race.id} race={race} selected={race.id === selected?.id} onSelect={() => setSelectedId(race.id)} />)}
+          <div className="race-result-index">
+            <div className="race-result-list" aria-label="Race results">
+              {resultPages.pageItems.map((race) => <RaceResultListItem key={race.id} race={race} selected={race.id === selected?.id} onSelect={() => setSelectedId(race.id)} />)}
+            </div>
+            <Pagination current={resultPages.page} total={resultPages.totalPages} onChange={resultPages.setPage} label="Race result pages" compact />
           </div>
           {selected && <RaceResultDetail race={selected} />}
         </div>}
@@ -280,11 +296,14 @@ const CalendarPage = ({ month, setMonth, showLatest, data, error, isLoading, rel
   </div>;
 };
 
-const RaceResultDetail = ({ race }: { race: CuratedRaceResult }) => <article className="race-result-detail" data-testid="race-result-detail">
-  <header className="result-detail-head"><div><p className="kicker">{raceDay.format(new Date(race.startUtc))} · {raceClock.format(new Date(race.startUtc))} · {race.courseName}</p><h2>{race.raceName}</h2><div className="race-tags"><span>{race.raceType}</span>{race.raceClass && <span>Class {race.raceClass}</span>}<span>{race.distance}</span><span>{race.going}</span>{race.prizeAmount != null && <span>{new Intl.NumberFormat("en-GB", { style: "currency", currency: race.prizeCurrency ?? "GBP", maximumFractionDigits: 0 }).format(race.prizeAmount)}</span>}</div></div><span className="result-seal"><TrophyIcon /><small>{race.abandoned ? "Status" : "Winner"}</small><strong>{race.abandoned ? "Abandoned" : race.winner ?? "Recorded"}</strong></span></header>
-  <div className="race-context-grid"><RaceWeatherCard race={race} /><div className="course-context"><p className="context-label">Course position</p>{race.location ? <><strong>{race.courseName}</strong><span>{race.location.latitude.toFixed(4)}, {race.location.longitude.toFixed(4)}</span><small>{race.location.postcode ?? "Postcode not recorded"} · {race.location.locationSource}</small></> : <><strong>{race.courseName}</strong><span>Location pending</span><small>Weather enrichment requires resolved coordinates.</small></>}</div></div>
-  <section className="finishing-order"><div className="finishing-title"><div><p className="kicker">Official order</p><h3>{race.runners.length} declared runners</h3></div><span>Odds shown as returned by source</span></div><div className="runner-table" role="table" aria-label={`Finishing order for ${race.raceName}`}><div className="runner-row runner-row--head" role="row"><span>Pos</span><span>Horse</span><span>Jockey / trainer / owner</span><span>SP</span><span>Distance / time</span></div>{race.runners.map((runner, index) => <RunnerResultRow key={`${runner.horseName}-${index}`} runner={runner} />)}</div></section>
-</article>;
+const RaceResultDetail = ({ race }: { race: CuratedRaceResult }) => {
+  const runnerPages = useClientPagination(race.runners, 10, race.id);
+  return <article className="race-result-detail" data-testid="race-result-detail">
+    <header className="result-detail-head"><div><p className="kicker">{raceDay.format(new Date(race.startUtc))} · {raceClock.format(new Date(race.startUtc))} · {race.courseName}</p><h2>{race.raceName}</h2><div className="race-tags"><span>{race.raceType}</span>{race.raceClass && <span>Class {race.raceClass}</span>}<span>{race.distance}</span><span>{race.going}</span>{race.prizeAmount != null && <span>{new Intl.NumberFormat("en-GB", { style: "currency", currency: race.prizeCurrency ?? "GBP", maximumFractionDigits: 0 }).format(race.prizeAmount)}</span>}</div></div><span className="result-seal"><TrophyIcon /><small>{race.abandoned ? "Status" : "Winner"}</small><strong>{race.abandoned ? "Abandoned" : race.winner ?? "Recorded"}</strong></span></header>
+    <div className="race-context-grid"><RaceWeatherCard race={race} /><div className="course-context"><p className="context-label">Course position</p>{race.location ? <><strong>{race.courseName}</strong><span>{race.location.latitude.toFixed(4)}, {race.location.longitude.toFixed(4)}</span><small>{race.location.postcode ?? "Postcode not recorded"} · {race.location.locationSource}</small></> : <><strong>{race.courseName}</strong><span>Location pending</span><small>Weather enrichment requires resolved coordinates.</small></>}</div></div>
+    <section className="finishing-order"><div className="finishing-title"><div><p className="kicker">Official order</p><h3>{race.runners.length} declared runners</h3></div><span>Odds shown as returned by source</span></div><div className="runner-table" role="table" aria-label={`Finishing order for ${race.raceName}`}><div className="runner-row runner-row--head" role="row"><span>Pos</span><span>Horse</span><span>Jockey / trainer / owner</span><span>SP</span><span>Distance / time</span></div>{runnerPages.pageItems.map((runner, index) => <RunnerResultRow key={`${runner.horseName}-${(runnerPages.page - 1) * 10 + index}`} runner={runner} />)}</div><Pagination current={runnerPages.page} total={runnerPages.totalPages} onChange={runnerPages.setPage} label="Runner pages" /></section>
+  </article>;
+};
 
 const RaceWeatherCard = ({ race }: { race: CuratedRaceResult }) => {
   const weather = race.weather;
@@ -338,7 +357,7 @@ const ExplorerPage = ({ overview, entities, error, entitiesError, isLoading, ent
           <>
             <section className="section-block distribution-section">
               <div className="section-heading"><div><p className="kicker">Collection profile</p><h2>What’s in the paddock</h2></div><p>Choose a family to narrow the directory.</p></div>
-              <div className="distribution-grid">{overview.entityTypes.map((summary) => <button type="button" key={summary.type} className={type === summary.type ? "distribution-item selected" : "distribution-item"} style={typeStyle(summary.type)} onClick={() => onTypeChange(type === summary.type ? "" : summary.type)}><span className="distribution-name"><i />{summary.type}</span><strong>{number.format(summary.count)}</strong><span className="distribution-track"><i style={{ width: `${Math.max(8, (summary.count / overview.entityTypes[0].count) * 100)}%` }} /></span></button>)}</div>
+              <EntityTypeGrid summaries={overview.entityTypes} selectedType={type} onTypeChange={onTypeChange} />
             </section>
             <section className="section-block directory-section">
               <div className="section-heading directory-heading"><div><p className="kicker">Entity directory</p><h2>Observed records</h2></div><span className="result-count">{number.format(entities?.totalCount ?? 0)} matches</span></div>
@@ -357,6 +376,12 @@ const ExplorerPage = ({ overview, entities, error, entitiesError, isLoading, ent
 
 const Metric = ({ value, label, note, index, compact = false }: { value: string; label: string; note: string; index: string; compact?: boolean }) => <div className="metric"><span className="metric-index">/{index}</span><strong className={compact ? "compact" : undefined}>{value}</strong><div><span>{label}</span><small>{note}</small></div></div>;
 
+const EntityTypeGrid = ({ summaries, selectedType, onTypeChange }: { summaries: readonly { type: string; count: number }[]; selectedType: string; onTypeChange: (value: string) => void }) => {
+  const pages = useClientPagination(summaries, 8);
+  const largestCount = summaries[0]?.count ?? 1;
+  return <><div className="distribution-grid">{pages.pageItems.map((summary) => <button type="button" key={summary.type} className={selectedType === summary.type ? "distribution-item selected" : "distribution-item"} style={typeStyle(summary.type)} onClick={() => onTypeChange(selectedType === summary.type ? "" : summary.type)}><span className="distribution-name"><i />{summary.type}</span><strong>{number.format(summary.count)}</strong><span className="distribution-track"><i style={{ width: `${Math.max(8, (summary.count / largestCount) * 100)}%` }} /></span></button>)}</div><Pagination current={pages.page} total={pages.totalPages} onChange={pages.setPage} label="Entity family pages" /></>;
+};
+
 const EntityCard = ({ entity, index, onSelect }: { entity: CuratedEntity; index: number; onSelect: (entity: CuratedEntity) => void }) => {
   const signals = Object.entries(entity.data).filter(([, value]) => ["string", "number", "boolean"].includes(typeof value)).slice(0, 2);
   return <button className="entity-card" type="button" style={typeStyle(entity.domainObjectType)} onClick={() => onSelect(entity)} data-testid="entity-card"><span className="entity-card-index">{String(index).padStart(3, "0")}</span><span className="entity-type"><i />{entity.domainObjectType}</span><span className="entity-arrow"><ArrowIcon /></span><strong>{entity.displayName}</strong><small className="source-key">{entity.sourceKey}</small><span className="signal-row">{signals.length > 0 ? signals.map(([key, value]) => <span key={key}><small>{titleCase(key)}</small>{String(value)}</span>) : <span><small>Source system</small>{entity.sourceSystem}</span>}</span><span className="entity-card-foot"><span>Last seen</span>{formatRelative(entity.lastObservedAtUtc)}</span></button>;
@@ -366,6 +391,10 @@ const EntityDrawer = ({ entity, onNavigate, onClose }: { entity: CuratedEntity; 
   const [connections, setConnections] = useState<CuratedEntityConnections>();
   const [connectionsError, setConnectionsError] = useState<string>();
   const [connectionsLoading, setConnectionsLoading] = useState(true);
+  const properties = useMemo(() => Object.entries(entity.data), [entity.data]);
+  const propertyPages = useClientPagination(properties, 12, entity.id);
+  const connectionLinks = connections?.links ?? [];
+  const connectionPages = useClientPagination(connectionLinks, 8, entity.id);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
@@ -393,22 +422,71 @@ const EntityDrawer = ({ entity, onNavigate, onClose }: { entity: CuratedEntity; 
     return () => controller.abort();
   }, [entity.id]);
 
-  return <div className="drawer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <aside className="entity-drawer" role="dialog" aria-modal="true" aria-label={`${entity.displayName} details`} style={typeStyle(entity.domainObjectType)}>
-      <div className="drawer-head"><span className="entity-type"><i />{entity.domainObjectType}</span><button className="icon-button" type="button" onClick={onClose} aria-label="Close details"><CloseIcon /></button></div>
-      <div className="drawer-title"><p className="kicker">Curated entity</p><h2>{entity.displayName}</h2><code>{entity.sourceKey}</code></div>
-      <section className="drawer-section"><p className="drawer-label">Found data</p><div className="property-list">{Object.entries(entity.data).map(([key, value]) => <Property key={key} name={key} value={value} />)}</div></section>
-      <section className="drawer-section linked-records">
-        <p className="drawer-label">Linked entity records</p>
-        {connectionsLoading && <p className="linked-records-state">Finding related records…</p>}
-        {!connectionsLoading && connectionsError && <p className="linked-records-state error">{connectionsError}</p>}
-        {!connectionsLoading && connections && connections.links.length === 0 && <p className="linked-records-state">No direct curated links were found for this record.</p>}
-        {!connectionsLoading && connections && connections.links.length > 0 && <div className="linked-record-list">{connections.links.map((link) => <button type="button" key={link.entity.id} style={typeStyle(link.entity.domainObjectType)} onClick={() => onNavigate(link.entity)}><i /><span><small>{link.direction} · {link.label} · {link.entity.domainObjectType}</small><strong>{link.entity.displayName}</strong><code>{link.entity.sourceKey}</code></span><ArrowIcon /></button>)}</div>}
-        {connections?.hasMore && <p className="linked-records-state">Showing the first 100 linked records.</p>}
-      </section>
-      <section className="drawer-section lineage"><p className="drawer-label">Observation & lineage</p><div className="lineage-timeline"><LineagePoint title="First observed" value={formatDateTime(entity.firstObservedAtUtc)} /><LineagePoint title="Last observed" value={formatDateTime(entity.lastObservedAtUtc)} active /></div><dl><div><dt>Raw payload</dt><dd title={entity.rawPayloadId}>{shortId(entity.rawPayloadId)}</dd></div><div><dt>Collection run</dt><dd title={entity.rawCollectionRunId}>{shortId(entity.rawCollectionRunId)}</dd></div><div><dt>Promotion run</dt><dd title={entity.lastPromotionRunId}>{shortId(entity.lastPromotionRunId)}</dd></div></dl></section>
-      <a className="source-link" href={entity.sourceUrl} target="_blank" rel="noreferrer"><span><small>Original source</small>{new URL(entity.sourceUrl).hostname}</span><ExternalIcon /></a>
-      <details className="json-details"><summary>View curated JSON</summary><pre>{JSON.stringify(entity.data, null, 2)}</pre></details>
+  const initial = entity.displayName.trim().charAt(0).toUpperCase() || "?";
+
+  return <div className="drawer-backdrop" role="presentation">
+    <aside className="entity-drawer entity-modal" role="dialog" aria-modal="true" aria-label={`${entity.displayName} details`} style={typeStyle(entity.domainObjectType)} data-testid="entity-fullscreen-modal">
+      <header className="entity-modal-bar">
+        <div className="atlas-brand"><span>Explore / {entity.domainObjectType}</span><strong>Record atlas</strong></div>
+        <div className="atlas-actions"><span>Esc to return</span><button className="icon-button modal-close" type="button" onClick={onClose} aria-label="Close details"><CloseIcon /></button></div>
+      </header>
+
+      <div className="entity-modal-scroll">
+        <section className="entity-modal-hero">
+          <div className="entity-constellation" aria-hidden="true">
+            <span className="constellation-ring ring-one" />
+            <span className="constellation-ring ring-two" />
+            <span className="constellation-ring ring-three" />
+            <span className="constellation-node node-one" />
+            <span className="constellation-node node-two" />
+            <span className="constellation-node node-three" />
+            <span className="constellation-node node-four" />
+            <div className="entity-monogram"><small>{entity.domainObjectType}</small><strong>{initial}</strong></div>
+          </div>
+          <div className="entity-modal-identity">
+            <span className="entity-type"><i />{entity.domainObjectType}</span>
+            <p className="atlas-kicker">Curated relationship atlas</p>
+            <h2>{entity.displayName}</h2>
+            <code>{entity.sourceKey}</code>
+            <div className="entity-hero-signals">
+              <span><small>Source system</small><strong>{entity.sourceSystem}</strong></span>
+              <span><small>Observed fields</small><strong>{properties.length}</strong></span>
+              <span><small>Linked records</small><strong>{connectionsLoading ? "…" : connections?.links.length ?? 0}</strong></span>
+            </div>
+          </div>
+        </section>
+
+        <div className="entity-modal-grid">
+          <section className="entity-modal-panel entity-modal-facts">
+            <div className="entity-panel-heading"><div><p className="drawer-label">Found data</p><h3>What we know</h3></div><span>{properties.length} {properties.length === 1 ? "field" : "fields"}</span></div>
+            <div className="property-list">{propertyPages.pageItems.map(([key, value]) => <Property key={key} name={key} value={value} />)}</div>
+            <Pagination current={propertyPages.page} total={propertyPages.totalPages} onChange={propertyPages.setPage} label="Record field pages" />
+          </section>
+
+          <section className="entity-modal-panel entity-modal-links linked-records">
+            <div className="entity-panel-heading"><div><p className="drawer-label">Relationship map</p><h3>Linked records</h3></div>{connections && <span>{connections.links.length} found</span>}</div>
+            {connectionsLoading && <p className="linked-records-state">Finding related records…</p>}
+            {!connectionsLoading && connectionsError && <p className="linked-records-state error">{connectionsError}</p>}
+            {!connectionsLoading && connections && connections.links.length === 0 && <p className="linked-records-state">No direct curated links were found for this record.</p>}
+            {!connectionsLoading && connections && connections.links.length > 0 && <><div className="linked-record-list">{connectionPages.pageItems.map((link) => <button type="button" key={link.entity.id} style={typeStyle(link.entity.domainObjectType)} onClick={() => onNavigate(link.entity)}><i /><span><small>{link.direction} · {link.label} · {link.entity.domainObjectType}</small><strong>{link.entity.displayName}</strong><code>{link.entity.sourceKey}</code></span><ArrowIcon /></button>)}</div><Pagination current={connectionPages.page} total={connectionPages.totalPages} onChange={connectionPages.setPage} label="Linked record pages" /></>}
+            {connections?.hasMore && <p className="linked-records-state">Showing the first 100 linked records.</p>}
+          </section>
+
+          <section className="entity-modal-panel entity-modal-lineage lineage">
+            <div className="entity-panel-heading"><div><p className="drawer-label">Observation & lineage</p><h3>A record with receipts</h3></div><span>Traceable</span></div>
+            <div className="lineage-timeline"><LineagePoint title="First observed" value={formatDateTime(entity.firstObservedAtUtc)} /><LineagePoint title="Last observed" value={formatDateTime(entity.lastObservedAtUtc)} active /></div>
+            <dl><div><dt>Raw payload</dt><dd title={entity.rawPayloadId}>{shortId(entity.rawPayloadId)}</dd></div><div><dt>Collection run</dt><dd title={entity.rawCollectionRunId}>{shortId(entity.rawCollectionRunId)}</dd></div><div><dt>Promotion run</dt><dd title={entity.lastPromotionRunId}>{shortId(entity.lastPromotionRunId)}</dd></div></dl>
+          </section>
+
+          <section className="entity-modal-panel entity-modal-source">
+            <p className="drawer-label">Source portal</p>
+            <p>This curated record can always be traced back to the page that introduced it.</p>
+            <a className="source-link" href={entity.sourceUrl} target="_blank" rel="noreferrer"><span><small>Original source</small>{new URL(entity.sourceUrl).hostname}</span><ExternalIcon /></a>
+          </section>
+        </div>
+
+        <details className="json-details entity-modal-json"><summary><span>Developer hatch</span> View curated JSON</summary><pre>{JSON.stringify(entity.data, null, 2)}</pre></details>
+      </div>
     </aside>
   </div>;
 };
@@ -418,8 +496,10 @@ const LineagePoint = ({ title, value, active = false }: { title: string; value: 
 
 const PatternsPage = ({ graph, isLoading, error, onRetry }: { graph?: RelationshipGraph; isLoading: boolean; error?: string; onRetry: () => void }) => {
   const hubs = useMemo(() => getHubs(graph), [graph]);
+  const patternPages = useClientPagination(graph?.patterns ?? [], 8);
+  const hubPages = useClientPagination(hubs, 12);
   const [selectedHubId, setSelectedHubId] = useState<string>();
-  const selected = hubs.find((hub) => hub.node.id === selectedHubId) ?? hubs[0];
+  const selected = hubPages.pageItems.find((hub) => hub.node.id === selectedHubId) ?? hubPages.pageItems[0];
   const maxPattern = Math.max(...(graph?.patterns.map((pattern) => pattern.count) ?? [1]));
   return (
     <div className="page-wrap">
@@ -441,9 +521,9 @@ const PatternsPage = ({ graph, isLoading, error, onRetry }: { graph?: Relationsh
               <section className="section-block">
                 <div className="section-heading"><div><p className="kicker">Pattern frequency</p><h2>Families that travel together</h2></div><p>Strongest inferred relationships in this sample.</p></div>
                 <div className="pattern-list">
-                  {graph.patterns.map((pattern, index) => (
+                  {patternPages.pageItems.map((pattern, index) => (
                     <div className="pattern-row" key={`${pattern.sourceType}-${pattern.targetType}`}>
-                      <span>{String(index + 1).padStart(2, "0")}</span>
+                      <span>{String((patternPages.page - 1) * 8 + index + 1).padStart(2, "0")}</span>
                       <strong style={typeStyle(pattern.sourceType)}><i />{pattern.sourceType}</strong>
                       <ArrowIcon />
                       <strong style={typeStyle(pattern.targetType)}><i />{pattern.targetType}</strong>
@@ -452,16 +532,18 @@ const PatternsPage = ({ graph, isLoading, error, onRetry }: { graph?: Relationsh
                     </div>
                   ))}
                 </div>
+                <Pagination current={patternPages.page} total={patternPages.totalPages} onChange={patternPages.setPage} label="Relationship pattern pages" />
               </section>
               <section className="section-block connection-browser">
                 <div className="section-heading"><div><p className="kicker">Connection browser</p><h2>Explore the hubs</h2></div><p>Select an entity to inspect its immediate neighbourhood.</p></div>
                 <div className="connection-layout">
                   <div className="hub-list">
-                    {hubs.slice(0, 24).map((hub) => (
+                    {hubPages.pageItems.map((hub) => (
                       <button type="button" key={hub.node.id} className={selected?.node.id === hub.node.id ? "hub-item selected" : "hub-item"} onClick={() => setSelectedHubId(hub.node.id)} style={typeStyle(hub.node.type)}>
                         <i /><span><strong>{hub.node.displayName}</strong><small>{hub.node.type}</small></span><b>{hub.neighbours.length}</b>
                       </button>
                     ))}
+                    <Pagination current={hubPages.page} total={hubPages.totalPages} onChange={hubPages.setPage} label="Connection hub pages" compact />
                   </div>
                   {selected && <Neighbourhood hub={selected.node} neighbours={selected.neighbours} />}
                 </div>
@@ -480,7 +562,10 @@ const getHubs = (graph?: RelationshipGraph) => {
   return graph.nodes.map((node) => ({ node, neighbours: graph.edges.flatMap((edge) => { if (edge.sourceId === node.id && nodes.has(edge.targetId)) return [{ node: nodes.get(edge.targetId)!, label: edge.label }]; if (edge.targetId === node.id && nodes.has(edge.sourceId)) return [{ node: nodes.get(edge.sourceId)!, label: edge.label }]; return []; }) })).filter((hub) => hub.neighbours.length > 0).sort((left, right) => right.neighbours.length - left.neighbours.length);
 };
 
-const Neighbourhood = ({ hub, neighbours }: { hub: RelationshipNode; neighbours: { node: RelationshipNode; label: string }[] }) => <div className="neighbourhood"><div className="hub-focus" style={typeStyle(hub.type)}><span className="orbit orbit-one" /><span className="orbit orbit-two" /><i /><small>{hub.type}</small><strong>{hub.displayName}</strong><span>{neighbours.length} direct {neighbours.length === 1 ? "link" : "links"}</span></div><div className="neighbour-list">{neighbours.slice(0, 12).map(({ node, label }) => <div className="neighbour" key={node.id} style={typeStyle(node.type)}><span className="link-line"><i /></span><span className="neighbour-dot" /><div><small>{label} · {node.type}</small><strong>{node.displayName}</strong></div></div>)}</div></div>;
+const Neighbourhood = ({ hub, neighbours }: { hub: RelationshipNode; neighbours: { node: RelationshipNode; label: string }[] }) => {
+  const pages = useClientPagination(neighbours, 8, hub.id);
+  return <div className="neighbourhood"><div className="hub-focus" style={typeStyle(hub.type)}><span className="orbit orbit-one" /><span className="orbit orbit-two" /><i /><small>{hub.type}</small><strong>{hub.displayName}</strong><span>{neighbours.length} direct {neighbours.length === 1 ? "link" : "links"}</span></div><div className="neighbour-list">{pages.pageItems.map(({ node, label }) => <div className="neighbour" key={node.id} style={typeStyle(node.type)}><span className="link-line"><i /></span><span className="neighbour-dot" /><div><small>{label} · {node.type}</small><strong>{node.displayName}</strong></div></div>)}<Pagination current={pages.page} total={pages.totalPages} onChange={pages.setPage} label="Neighbour pages" compact /></div></div>;
+};
 
 const AdminPage = ({ data, error, isLoading, reload }: { data?: AuditSnapshot; error?: string; isLoading: boolean; reload: () => void }) => {
   const [tab, setTab] = useState<AuditTab>("raw");
@@ -493,12 +578,20 @@ const AdminPage = ({ data, error, isLoading, reload }: { data?: AuditSnapshot; e
 const PipelineHealth = ({ data }: { data: AuditSnapshot }) => { const hasFailures = data.summary.failedRawRuns + data.summary.failedPromotionRuns > 0; const runningJobs = data.summary.runningRawRuns + data.summary.runningPromotionRuns; return <section className="pipeline-card"><div className="pipeline-title"><span><DatabaseIcon /></span><div><p className="kicker">Data journey</p><h2>Source to serving layer</h2></div><span className={hasFailures ? "pipeline-status warning" : runningJobs > 0 ? "pipeline-status running" : "pipeline-status"}><i />{runningJobs > 0 ? `${runningJobs} ${runningJobs === 1 ? "job" : "jobs"} in progress` : hasFailures ? "Review failures" : "No failures recorded"}</span></div><div className="pipeline-flow"><PipelineStage number="01" title="BHA sources" note="External responses" status="source" /><span className="flow-line"><i /></span><PipelineStage number="02" title="Raw layer" note={`Last run ${formatRelative(data.summary.lastRawRunAtUtc)}`} status={data.summary.runningRawRuns > 0 ? "running" : data.summary.failedRawRuns > 0 ? "warning" : "ok"} /><span className="flow-line"><i /></span><PipelineStage number="03" title="Curated layer" note={`Last run ${formatRelative(data.summary.lastPromotionRunAtUtc)}`} status={data.summary.runningPromotionRuns > 0 ? "running" : data.summary.failedPromotionRuns > 0 ? "warning" : "ok"} /></div></section>; };
 const PipelineStage = ({ number: stage, title, note, status }: { number: string; title: string; note: string; status: string }) => <div className={`pipeline-stage ${status}`}><span>{stage}</span><i>{status === "warning" ? <AlertIcon /> : <TickIcon />}</i><strong>{title}</strong><small>{note}</small></div>;
 
-const RawAuditTable = ({ runs }: { runs: RawRunAudit[] }) => runs.length === 0 ? <AuditEmpty layer="Raw" /> : <div className="audit-table" role="table" aria-label="Raw collection runs"><div className="audit-row audit-row--head" role="row"><span>Status</span><span>Job / source</span><span>Started</span><span>Finished</span><span>Duration</span><span>Response</span><span>Payload</span></div>{runs.map((run) => <div className="audit-row" role="row" key={run.id}><span><Outcome value={run.outcome} /></span><span className="job-cell"><strong>{run.jobName}</strong><small>{run.sourceName} · v{run.collectorVersion}</small>{run.errorMessage && <em>{run.errorCode}: {run.errorMessage}</em>}</span><span>{formatDateTime(run.startedAtUtc)}</span><span>{run.completedAtUtc ? formatDateTime(run.completedAtUtc) : <strong className="in-progress">In progress</strong>}</span><span>{formatDuration(run.startedAtUtc, run.completedAtUtc)}</span><span>{run.httpStatusCode ?? "—"}<small>{run.mediaType ?? "No media type"}</small></span><span title={run.payloadId ?? undefined}>{formatBytes(run.payloadBytes)}<small>{shortId(run.payloadId)}</small></span></div>)}</div>;
-const PromotionAuditTable = ({ runs }: { runs: PromotionRunAudit[] }) => runs.length === 0 ? <AuditEmpty layer="Curated" /> : <div className="audit-table" role="table" aria-label="Curated promotion runs"><div className="audit-row audit-row--head" role="row"><span>Status</span><span>Job / source</span><span>Started</span><span>Finished</span><span>Duration</span><span>Found</span><span>Upserted</span></div>{runs.map((run) => <div className="audit-row" role="row" key={run.id}><span><Outcome value={run.outcome} /></span><span className="job-cell"><strong>{run.jobName}</strong><small>{run.sourceJobName} · v{run.promoterVersion}</small>{run.errorMessage && <em>{run.errorCode}: {run.errorMessage}</em>}</span><span>{formatDateTime(run.startedAtUtc)}</span><span>{run.completedAtUtc ? formatDateTime(run.completedAtUtc) : <strong className="in-progress">In progress</strong>}</span><span>{formatDuration(run.startedAtUtc, run.completedAtUtc)}</span><span>{number.format(run.recordsFound)}<small>records</small></span><span>{number.format(run.recordsUpserted)}<small>records</small></span></div>)}</div>;
+const RawAuditTable = ({ runs }: { runs: RawRunAudit[] }) => {
+  const pages = useClientPagination(runs, 10);
+  if (runs.length === 0) return <AuditEmpty layer="Raw" />;
+  return <><div className="audit-table" role="table" aria-label="Raw collection runs"><div className="audit-row audit-row--head" role="row"><span>Status</span><span>Job / source</span><span>Started</span><span>Finished</span><span>Duration</span><span>Response</span><span>Payload</span></div>{pages.pageItems.map((run) => <div className="audit-row" role="row" key={run.id}><span><Outcome value={run.outcome} /></span><span className="job-cell"><strong>{run.jobName}</strong><small>{run.sourceName} · v{run.collectorVersion}</small>{run.errorMessage && <em>{run.errorCode}: {run.errorMessage}</em>}</span><span>{formatDateTime(run.startedAtUtc)}</span><span>{run.completedAtUtc ? formatDateTime(run.completedAtUtc) : <strong className="in-progress">In progress</strong>}</span><span>{formatDuration(run.startedAtUtc, run.completedAtUtc)}</span><span>{run.httpStatusCode ?? "—"}<small>{run.mediaType ?? "No media type"}</small></span><span title={run.payloadId ?? undefined}>{formatBytes(run.payloadBytes)}<small>{shortId(run.payloadId)}</small></span></div>)}</div><Pagination current={pages.page} total={pages.totalPages} onChange={pages.setPage} label="Raw audit pages" /></>;
+};
+const PromotionAuditTable = ({ runs }: { runs: PromotionRunAudit[] }) => {
+  const pages = useClientPagination(runs, 10);
+  if (runs.length === 0) return <AuditEmpty layer="Curated" />;
+  return <><div className="audit-table" role="table" aria-label="Curated promotion runs"><div className="audit-row audit-row--head" role="row"><span>Status</span><span>Job / source</span><span>Started</span><span>Finished</span><span>Duration</span><span>Found</span><span>Upserted</span></div>{pages.pageItems.map((run) => <div className="audit-row" role="row" key={run.id}><span><Outcome value={run.outcome} /></span><span className="job-cell"><strong>{run.jobName}</strong><small>{run.sourceJobName} · v{run.promoterVersion}</small>{run.errorMessage && <em>{run.errorCode}: {run.errorMessage}</em>}</span><span>{formatDateTime(run.startedAtUtc)}</span><span>{run.completedAtUtc ? formatDateTime(run.completedAtUtc) : <strong className="in-progress">In progress</strong>}</span><span>{formatDuration(run.startedAtUtc, run.completedAtUtc)}</span><span>{number.format(run.recordsFound)}<small>records</small></span><span>{number.format(run.recordsUpserted)}<small>records</small></span></div>)}</div><Pagination current={pages.page} total={pages.totalPages} onChange={pages.setPage} label="Curated audit pages" /></>;
+};
 
 const Outcome = ({ value }: { value: string }) => <span className={`outcome outcome--${value.toLowerCase()}`}><i />{value === "Running" ? "In progress" : value}</span>;
 const AuditEmpty = ({ layer }: { layer: string }) => <div className="audit-empty"><ShieldIcon /><h3>No {layer.toLowerCase()} runs yet</h3><p>The ledger will populate after the corresponding local job has run.</p></div>;
-const Pagination = ({ current, total, onChange }: { current: number; total: number; onChange: (page: number) => void }) => total <= 1 ? null : <nav className="pagination" aria-label="Entity pages"><button type="button" disabled={current <= 1} onClick={() => onChange(current - 1)}><ChevronIcon left />Previous</button><span>Page <strong>{current}</strong> of {total}</span><button type="button" disabled={current >= total} onClick={() => onChange(current + 1)}>Next<ChevronIcon /></button></nav>;
+const Pagination = ({ current, total, onChange, label = "Data pages", compact = false }: { current: number; total: number; onChange: (page: number) => void; label?: string; compact?: boolean }) => total <= 1 ? null : <nav className={compact ? "pagination pagination--compact" : "pagination"} aria-label={label}><button type="button" disabled={current <= 1} onClick={() => onChange(current - 1)}><ChevronIcon left /><span>Previous</span></button><span>Page <strong>{current}</strong> of {total}</span><button type="button" disabled={current >= total} onClick={() => onChange(current + 1)}><span>Next</span><ChevronIcon /></button></nav>;
 
 const ApiError = ({ message, onRetry }: { message: string; onRetry: () => void }) => <section className="api-error" role="alert"><span><AlertIcon /></span><div><p className="kicker">Curated API unavailable</p><h2>No substitute data is being shown.</h2><p>{message} Start the local API and confirm PostgreSQL is available.</p><code>dotnet run --project src/HorseRacing.Api</code></div><button type="button" onClick={onRetry}><RefreshIcon />Try again</button></section>;
 const InlineError = ({ message }: { message: string }) => <div className="inline-error" role="alert"><AlertIcon /><span><strong>Records could not be loaded.</strong>{message}</span></div>;
