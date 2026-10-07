@@ -78,6 +78,24 @@ const formatDuration = (started: string, completed?: string | null) => {
 };
 const shortId = (value?: string | null) => (value ? `${value.slice(0, 8)}…${value.slice(-4)}` : "—");
 const titleCase = (value: string) => value.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " ");
+const ordinal = (value: number) => {
+  const remainder = value % 100;
+  if (remainder >= 11 && remainder <= 13) return `${value}th`;
+  return `${value}${value % 10 === 1 ? "st" : value % 10 === 2 ? "nd" : value % 10 === 3 ? "rd" : "th"}`;
+};
+const resultPosition = (entity: CuratedEntity) => {
+  if (!entity.domainObjectType.toLowerCase().includes("result")) return undefined;
+  for (const key of ["finalPosition", "resultFinishPos", "finishPosition", "position", "ptpPosition"]) {
+    const value = entity.data[key];
+    if (typeof value === "number" && Number.isFinite(value) && value > 0) return ordinal(value);
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) && parsed > 0 ? ordinal(parsed) : value.trim();
+    }
+  }
+  const status = entity.data.status;
+  return typeof status === "string" && /non.?runner/i.test(status) ? "NR" : undefined;
+};
 
 const typePalette = ["#df4c33", "#4263eb", "#14866d", "#8a5cf6", "#c88405", "#d64a87", "#2878a5"];
 const typeColour = (value: string) => typePalette[[...value].reduce((total, character) => total + character.charCodeAt(0), 0) % typePalette.length];
@@ -471,6 +489,7 @@ const EntityDrawer = ({ entity, onNavigate, onClose }: { entity: CuratedEntity; 
   }, [entity.id]);
 
   const initial = entity.displayName.trim().charAt(0).toUpperCase() || "?";
+  const position = resultPosition(entity);
 
   return <div className="drawer-backdrop" role="presentation">
     <aside className="entity-drawer entity-modal" role="dialog" aria-modal="true" aria-label={`${entity.displayName} details`} style={typeStyle(entity.domainObjectType)} data-testid="entity-fullscreen-modal">
@@ -481,7 +500,7 @@ const EntityDrawer = ({ entity, onNavigate, onClose }: { entity: CuratedEntity; 
 
       <div className="entity-modal-scroll">
         <section className="entity-modal-hero">
-          <div className="entity-constellation" aria-hidden="true">
+          <div className="entity-constellation">
             <span className="constellation-ring ring-one" />
             <span className="constellation-ring ring-two" />
             <span className="constellation-ring ring-three" />
@@ -489,7 +508,7 @@ const EntityDrawer = ({ entity, onNavigate, onClose }: { entity: CuratedEntity; 
             <span className="constellation-node node-two" />
             <span className="constellation-node node-three" />
             <span className="constellation-node node-four" />
-            <div className="entity-monogram"><small>{entity.domainObjectType}</small><strong>{initial}</strong></div>
+            <div className="entity-monogram" data-testid="entity-type-emblem"><span className="entity-monogram-initial" aria-hidden="true">{initial}</span><small>Entity type</small><strong>{titleCase(entity.domainObjectType)}</strong>{position && <b className="result-position" data-testid="result-position"><small>Finish position</small><span>{position}</span></b>}</div>
           </div>
           <div className="entity-modal-identity">
             <span className="entity-type"><i />{entity.domainObjectType}</span>
@@ -505,19 +524,20 @@ const EntityDrawer = ({ entity, onNavigate, onClose }: { entity: CuratedEntity; 
         </section>
 
         <div className="entity-modal-grid">
-          <section className="entity-modal-panel entity-modal-facts">
-            <div className="entity-panel-heading"><div><p className="drawer-label">Found data</p><h3>What we know</h3></div><span>{properties.length} {properties.length === 1 ? "field" : "fields"}</span></div>
-            <div className="property-list">{propertyPages.pageItems.map(([key, value]) => <Property key={key} name={key} value={value} />)}</div>
-            <Pagination current={propertyPages.page} total={propertyPages.totalPages} onChange={propertyPages.setPage} label="Record field pages" />
-          </section>
-
-          <section className="entity-modal-panel entity-modal-links linked-records">
-            <div className="entity-panel-heading"><div><p className="drawer-label">Relationship map</p><h3>Linked records</h3></div>{connections && <span>{connections.links.length} found</span>}</div>
+          <section className="entity-modal-panel entity-modal-links linked-records" data-testid="linked-record-panel">
+            <div className="entity-panel-heading"><div><p className="drawer-label">Relationship map</p><h3>Where this record leads</h3></div>{connections && <span>{connections.links.length} found</span>}</div>
+            <div className="relationship-focus" aria-label="Current record and linked records"><span><small>Currently viewing</small><strong>{entity.displayName}</strong><code>{titleCase(entity.domainObjectType)}</code></span><i><ArrowIcon /></i><span><small>Linked destinations</small><strong>{connectionsLoading ? "Mapping…" : `${connectionLinks.length} ${connectionLinks.length === 1 ? "record" : "records"}`}</strong><code>Choose a card to continue exploring</code></span></div>
             {connectionsLoading && <p className="linked-records-state">Finding related records…</p>}
             {!connectionsLoading && connectionsError && <p className="linked-records-state error">{connectionsError}</p>}
             {!connectionsLoading && connections && connections.links.length === 0 && <p className="linked-records-state">No direct curated links were found for this record.</p>}
             {!connectionsLoading && connections && connections.links.length > 0 && <><div className="linked-record-list">{connectionPages.pageItems.map((link) => <button type="button" key={link.entity.id} style={typeStyle(link.entity.domainObjectType)} onClick={() => onNavigate(link.entity)}><i /><span><small>{link.direction} · {link.label} · {link.entity.domainObjectType}</small><strong>{link.entity.displayName}</strong><code>{link.entity.sourceKey}</code></span><ArrowIcon /></button>)}</div><Pagination current={connectionPages.page} total={connectionPages.totalPages} onChange={connectionPages.setPage} label="Linked record pages" /></>}
             {connections?.hasMore && <p className="linked-records-state">Showing the first 100 linked records.</p>}
+          </section>
+
+          <section className="entity-modal-panel entity-modal-facts">
+            <div className="entity-panel-heading"><div><p className="drawer-label">Found data</p><h3>What we know</h3></div><span>{properties.length} {properties.length === 1 ? "field" : "fields"}</span></div>
+            <div className="property-list">{propertyPages.pageItems.map(([key, value]) => <Property key={key} name={key} value={value} />)}</div>
+            <Pagination current={propertyPages.page} total={propertyPages.totalPages} onChange={propertyPages.setPage} label="Record field pages" />
           </section>
 
           <section className="entity-modal-panel entity-modal-lineage lineage">

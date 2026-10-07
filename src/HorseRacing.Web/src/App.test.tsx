@@ -41,11 +41,25 @@ const entities: CuratedEntity[] = [
     lastObservedAtUtc: "2026-10-06T08:30:00Z",
     data: { horseId: "HORSE-7", horseName: "Northern Signal", trainerId: "TRAINER-2" },
   },
+  {
+    id: "33333333-3333-3333-3333-333333333334",
+    sourceSystem: "BHA",
+    domainObjectType: "RunnerResult",
+    sourceKey: "2026:5706:0:HORSE-8",
+    displayName: "Crimson Blaze (GB)",
+    sourceUrl: "https://www.britishhorseracing.com/racing/results/",
+    rawPayloadId: "11111111-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+    rawCollectionRunId: "22222222-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+    lastPromotionRunId: "33333333-cccc-cccc-cccc-cccccccccccc",
+    firstObservedAtUtc: "2026-10-05T10:00:00Z",
+    lastObservedAtUtc: "2026-10-06T08:30:00Z",
+    data: { raceId: "2026:5706:0", racehorseName: "Crimson Blaze (GB)", finalPosition: 2, status: "Runner" },
+  },
 ];
 
 const overview: CuratedOverview = {
   generatedAtUtc: "2026-10-06T09:00:00Z",
-  totalEntities: 2,
+  totalEntities: 3,
   totalEntityTypes: 9,
   firstObservedAtUtc: "2026-10-05T09:00:00Z",
   lastObservedAtUtc: "2026-10-06T08:30:00Z",
@@ -269,6 +283,20 @@ describe("curated data workspace", () => {
     expect(within(dialog).getByRole("link", { name: /Original source/i })).toHaveAttribute("href", entities[0].sourceUrl);
     await user.click(await within(dialog).findByRole("button", { name: /Northern Signal/i }));
     expect(screen.getByRole("dialog", { name: "Northern Signal details" })).toBeInTheDocument();
+  });
+
+  it("foregrounds the entity type, result position and linked records", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole("heading", { name: "Observed records" });
+    await user.click(screen.getByRole("button", { name: /RunnerResult.*Crimson Blaze \(GB\)/i }));
+
+    const dialog = screen.getByRole("dialog", { name: "Crimson Blaze (GB) details" });
+    expect(within(dialog).getByTestId("entity-type-emblem")).toHaveTextContent("Runner Result");
+    expect(within(dialog).getByTestId("result-position")).toHaveTextContent("2nd");
+    const linkedRecords = within(dialog).getByTestId("linked-record-panel");
+    expect(within(linkedRecords).getByRole("heading", { name: "Where this record leads" })).toBeInTheDocument();
+    expect(await within(linkedRecords).findByRole("button", { name: /Ascot/i })).toBeInTheDocument();
   });
 
   it("paginates data grids without hiding later records", async () => {
