@@ -8,6 +8,11 @@ public interface ICuratedReadRepository
         CuratedEntityQuery query,
         CancellationToken cancellationToken);
 
+    Task<CuratedEntityConnections?> GetEntityConnectionsAsync(
+        Guid entityId,
+        int limit,
+        CancellationToken cancellationToken);
+
     Task<RelationshipGraph> GetRelationshipsAsync(
         int limit,
         CancellationToken cancellationToken);

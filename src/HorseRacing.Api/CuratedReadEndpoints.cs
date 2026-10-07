@@ -27,6 +27,23 @@ public static class CuratedReadEndpoints
                     cancellationToken)));
 
         curated.MapGet(
+            "/entities/{entityId:guid}/connections",
+            async (
+                Guid entityId,
+                int? limit,
+                ICuratedReadRepository repository,
+                CancellationToken cancellationToken) =>
+            {
+                var connections = await repository.GetEntityConnectionsAsync(
+                    entityId,
+                    limit ?? 100,
+                    cancellationToken);
+                return connections is null
+                    ? Results.NotFound()
+                    : Results.Ok(connections);
+            });
+
+        curated.MapGet(
             "/relationships",
             async (
                 int? limit,

@@ -36,6 +36,17 @@ public sealed record CuratedEntity(
     DateTimeOffset LastObservedAtUtc,
     JsonElement Data);
 
+public sealed record CuratedEntityConnections(
+    DateTimeOffset GeneratedAtUtc,
+    CuratedEntity Entity,
+    IReadOnlyCollection<CuratedEntityLink> Links,
+    bool HasMore);
+
+public sealed record CuratedEntityLink(
+    string Label,
+    string Direction,
+    CuratedEntity Entity);
+
 public sealed record RelationshipGraph(
     DateTimeOffset GeneratedAtUtc,
     IReadOnlyCollection<RelationshipNode> Nodes,
@@ -122,8 +133,10 @@ public sealed record AuditSnapshot(
 public sealed record AuditSummary(
     int TotalRawRuns,
     int FailedRawRuns,
+    int RunningRawRuns,
     int TotalPromotionRuns,
     int FailedPromotionRuns,
+    int RunningPromotionRuns,
     DateTimeOffset? LastRawRunAtUtc,
     DateTimeOffset? LastPromotionRunAtUtc);
 

@@ -39,6 +39,19 @@ export interface CuratedEntityPage {
   items: CuratedEntity[];
 }
 
+export interface CuratedEntityLink {
+  label: string;
+  direction: "inbound" | "outbound";
+  entity: CuratedEntity;
+}
+
+export interface CuratedEntityConnections {
+  generatedAtUtc: string;
+  entity: CuratedEntity;
+  links: CuratedEntityLink[];
+  hasMore: boolean;
+}
+
 export interface RelationshipNode {
   id: string;
   type: string;
@@ -134,8 +147,10 @@ export interface RaceResultsFeed {
 export interface AuditSummary {
   totalRawRuns: number;
   failedRawRuns: number;
+  runningRawRuns: number;
   totalPromotionRuns: number;
   failedPromotionRuns: number;
+  runningPromotionRuns: number;
   lastRawRunAtUtc?: string | null;
   lastPromotionRunAtUtc?: string | null;
 }

@@ -5,6 +5,7 @@ import App from "./App";
 import type {
   AuditSnapshot,
   CuratedEntity,
+  CuratedEntityConnections,
   CuratedEntityPage,
   CuratedOverview,
   RaceResultsFeed,
@@ -69,12 +70,22 @@ const audit: AuditSnapshot = {
   summary: {
     totalRawRuns: 12,
     failedRawRuns: 1,
+    runningRawRuns: 1,
     totalPromotionRuns: 10,
     failedPromotionRuns: 0,
+    runningPromotionRuns: 0,
     lastRawRunAtUtc: "2026-10-06T08:00:00Z",
     lastPromotionRunAtUtc: "2026-10-06T08:05:00Z",
   },
   rawRuns: [{
+    id: "raw-running",
+    jobName: "bha-results-runners-2026-5706-0",
+    sourceName: "BHA race results",
+    sourceUrl: "https://example.test/running",
+    collectorVersion: "2.0.0",
+    startedAtUtc: "2026-10-06T08:10:00Z",
+    outcome: "Running",
+  }, {
     id: "raw-1",
     jobName: "bha-racecourses",
     sourceName: "BHA racecourses",
@@ -179,6 +190,17 @@ const raceResults: RaceResultsFeed = {
   }],
 };
 
+const entityConnections = (entity: CuratedEntity): CuratedEntityConnections => ({
+  generatedAtUtc: "2026-10-06T09:00:00Z",
+  entity,
+  links: [{
+    label: entity.id === entities[0].id ? "featured horse" : "racecourse",
+    direction: "outbound",
+    entity: entity.id === entities[0].id ? entities[1] : entities[0],
+  }],
+  hasMore: false,
+});
+
 const json = (value: unknown) => Promise.resolve(new Response(JSON.stringify(value), { status: 200, headers: { "Content-Type": "application/json" } }));
 
 beforeEach(() => {
@@ -190,6 +212,11 @@ beforeEach(() => {
     if (url.pathname.endsWith("/curated/relationships")) return json(relationships);
     if (url.pathname.endsWith("/curated/results")) return json(raceResults);
     if (url.pathname.endsWith("/admin/audit")) return json(audit);
+    if (url.pathname.includes("/curated/entities/") && url.pathname.endsWith("/connections")) {
+      const entityId = url.pathname.split("/").at(-2);
+      const entity = entities.find((candidate) => candidate.id === entityId) ?? entities[0];
+      return json(entityConnections(entity));
+    }
     if (url.pathname.endsWith("/curated/entities")) {
       const type = url.searchParams.get("type");
       const search = url.searchParams.get("search")?.toLowerCase();
@@ -230,6 +257,8 @@ describe("curated data workspace", () => {
     expect(within(dialog).getByText("Observation & lineage")).toBeInTheDocument();
     expect(within(dialog).getByText("Raw payload")).toBeInTheDocument();
     expect(within(dialog).getByRole("link", { name: /Original source/i })).toHaveAttribute("href", entities[0].sourceUrl);
+    await user.click(await within(dialog).findByRole("button", { name: /Northern Signal/i }));
+    expect(screen.getByRole("dialog", { name: "Northern Signal details" })).toBeInTheDocument();
   });
 
   it("shows inferred patterns and the admin job audit", async () => {
@@ -243,6 +272,8 @@ describe("curated data workspace", () => {
     await user.click(screen.getByRole("button", { name: /Admin audit/i }));
     expect(await screen.findByRole("heading", { name: "Latest job activity" })).toBeInTheDocument();
     expect(screen.getByRole("table", { name: "Raw collection runs" })).toBeInTheDocument();
+    expect(screen.getAllByText("In progress").length).toBeGreaterThan(0);
+    expect(screen.getByText("Jobs running")).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: /Curated promotion/i }));
     expect(screen.getByRole("table", { name: "Curated promotion runs" })).toBeInTheDocument();
   });

@@ -1,5 +1,6 @@
 import type {
   AuditSnapshot,
+  CuratedEntityConnections,
   CuratedEntityPage,
   CuratedOverview,
   RaceResultsFeed,
@@ -38,6 +39,13 @@ export const curatedRepository = {
     if (type) parameters.set("type", type);
     if (search.trim()) parameters.set("search", search.trim());
     return readJson<CuratedEntityPage>(`/v1/curated/entities?${parameters}`, signal);
+  },
+
+  getEntityConnections(entityId: string, signal?: AbortSignal) {
+    return readJson<CuratedEntityConnections>(
+      `/v1/curated/entities/${encodeURIComponent(entityId)}/connections?limit=100`,
+      signal,
+    );
   },
 
   getRelationships(signal?: AbortSignal) {

@@ -135,7 +135,7 @@ npm install
 npm run dev
 ```
 
-The website reads Curated-layer data through the local API only. It provides race results with complete finishing order, course location and race-hour weather, plus entity browsing, provenance inspection, inferred relationship patterns and a read-only Raw/Curated job audit. Endpoint configuration and frontend quality gates are documented in [the web README](src/HorseRacing.Web/README.md).
+The website reads Curated-layer data through the local API only. It provides race results with complete finishing order, course location and race-hour weather, linked-record navigation from each explored entity, provenance inspection, inferred relationship patterns and a live read-only Raw/Curated job audit with explicit start, in-progress and finish times. Endpoint configuration and frontend quality gates are documented in [the web README](src/HorseRacing.Web/README.md).
 
 ## Current status
 

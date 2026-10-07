@@ -74,10 +74,11 @@ export const useAudit = (active: boolean) => {
     const controller = new AbortController();
     setIsLoading(true);
     setError(undefined);
-    curatedRepository
+    const load = () => curatedRepository
       .getAudit(controller.signal)
       .then((value) => {
         setData(value);
+        setError(undefined);
         setIsLoading(false);
       })
       .catch((caught: unknown) => {
@@ -86,7 +87,13 @@ export const useAudit = (active: boolean) => {
           setIsLoading(false);
         }
       });
-    return () => controller.abort();
+
+    void load();
+    const refreshInterval = window.setInterval(() => void load(), 5_000);
+    return () => {
+      window.clearInterval(refreshInterval);
+      controller.abort();
+    };
   }, [active, reloadKey]);
 
   return {

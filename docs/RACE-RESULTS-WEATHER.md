@@ -41,7 +41,19 @@ Use the restartable monthly runner for longer periods. It records one immutable 
   -RequestDelayMilliseconds 5000
 ```
 
-The resume process refreshes and validates the public BHA results-client token using the official-site workflow, waits through `418`/`429` throttling, and refuses to run alongside another historical `RaceDataSync` or resume process. January 2015 through September 2021 is 81 monthly batches; October 2021 onward belongs to the existing 60-month batch, so the two ranges do not overlap. On completion the runner performs the idempotent participant backfill used by Explore.
+The resume process refreshes and validates the public BHA results-client token using the official-site workflow, waits through `418`/`429` throttling, and refuses to run alongside another historical `RaceDataSync` or resume process. January 2015 through September 2021 is 81 monthly batches; October 2021 through September 2026 belongs to the existing 60-month batch, so the two ranges do not overlap. On completion the runner performs the idempotent participant backfill used by Explore.
+
+October through December 2026 is a rolling tail because future results do not exist yet. Run the available portion with:
+
+```powershell
+./scripts/resume-available-race-data-tail.ps1 `
+  -StartMonth 2026-10 `
+  -EndMonth 2026-12 `
+  -StateDirectory artifacts/2026-q4-sync `
+  -RequestDelayMilliseconds 5000
+```
+
+The tail runner bounds the current month at today's Europe/London date, reruns that month when a later day becomes available, and only records a final month when its calendar end has been reached. It shares the same exclusive import slot and token rules, so it must be serialized with the 60-month and 81-month historical phases. Together the three non-overlapping phases cover 1 January 2015 through 31 December 2026.
 
 ## API and website
 
@@ -55,7 +67,7 @@ After upgrading an existing local database, materialize participant identities f
 
 The backfill is idempotent, preserves Raw payload and promotion lineage, and does not call or interrupt any Raw source job. Direct participant records are left unchanged; only result-derived records are refreshed.
 
-The website's **Results** workspace provides search, race selection, winner and race facts, course coordinates/postcode, weather, and the full finishing order. **Calendar** opens on the latest imported month, groups races by their BHA meeting identity, and provides one tab per race with runners, jockeys, trainers, owners, odds, status, course details and race-time weather. **Explore** remains the generic Curated entity and inferred-pattern workspace. **Admin audit** exposes the Raw result/weather jobs and Curated promotions without exposing response bytes or credentials.
+The website's **Results** workspace provides search, race selection, winner and race facts, course coordinates/postcode, weather, and the full finishing order. **Calendar** opens on the latest imported month, groups races by their BHA meeting identity, and provides one tab per race with runners, jockeys, trainers, owners, odds, status, course details and race-time weather. **Explore** shows each entity's direct and inbound curated links and lets the operator open a related race, meeting, runner, horse, jockey, trainer, owner, stable or racecourse record in place. **Admin audit** refreshes every five seconds and shows running state, start time, finish time and duration for Raw jobs and Curated promotions without exposing response bytes or credentials.
 
 ## Persisted enrichment
 

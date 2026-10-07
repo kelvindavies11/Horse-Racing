@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using HorseRacing.Application.Browsing;
 using HorseRacing.Application.Ingestion.Curated;
 using HorseRacing.Application.Ingestion.Raw;
+using HorseRacing.Infrastructure.Ingestion.Curated;
 using Microsoft.EntityFrameworkCore;
 
 namespace HorseRacing.Infrastructure.Persistence.Repositories;
@@ -95,6 +96,234 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
             totalCount,
             (int)Math.Ceiling(totalCount / (double)pageSize),
             rows.Select(ToEntity).ToList());
+    }
+
+    public async Task<CuratedEntityConnections?> GetEntityConnectionsAsync(
+        Guid entityId,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var requestedLimit = Math.Clamp(limit, 10, 200);
+        var selected = await dbContext.CuratedDomainObjects
+            .AsNoTracking()
+            .SingleOrDefaultAsync(entity => entity.Id == entityId, cancellationToken);
+        if (selected is null)
+        {
+            return null;
+        }
+
+        var links = new Dictionary<Guid, CuratedEntityLink>();
+        var hasMore = false;
+
+        void AddLink(CuratedDomainObject related, string label, string direction)
+        {
+            if (related.Id == selected.Id || links.ContainsKey(related.Id))
+            {
+                return;
+            }
+
+            if (links.Count >= requestedLimit)
+            {
+                hasMore = true;
+                return;
+            }
+
+            links[related.Id] = new CuratedEntityLink(
+                label,
+                direction,
+                ToEntity(related));
+        }
+
+        async Task AddByIdentityAsync(
+            string type,
+            string sourceKey,
+            string label,
+            string direction)
+        {
+            var related = await dbContext.CuratedDomainObjects
+                .AsNoTracking()
+                .SingleOrDefaultAsync(
+                    entity => entity.DomainObjectType == type
+                        && entity.SourceKey == sourceKey,
+                    cancellationToken);
+            if (related is not null)
+            {
+                AddLink(related, label, direction);
+            }
+        }
+
+        async Task AddJsonReferrersAsync(
+            string sourceType,
+            string propertyName,
+            string sourceKey,
+            string label)
+        {
+            object value = long.TryParse(sourceKey, NumberStyles.Integer, CultureInfo.InvariantCulture, out var numeric)
+                ? numeric
+                : sourceKey;
+            var fragment = JsonSerializer.Serialize(new Dictionary<string, object>
+            {
+                ["foundData"] = new Dictionary<string, object> { [propertyName] = value }
+            });
+            var referrers = await dbContext.CuratedDomainObjects
+                .AsNoTracking()
+                .Where(entity => entity.DomainObjectType == sourceType
+                    && EF.Functions.JsonContains(entity.SourceDataJson, fragment))
+                .OrderByDescending(entity => entity.LastObservedAtUtc)
+                .Take(requestedLimit + 1)
+                .ToListAsync(cancellationToken);
+
+            if (referrers.Count > requestedLimit)
+            {
+                hasMore = true;
+            }
+            foreach (var referrer in referrers.Take(requestedLimit))
+            {
+                AddLink(referrer, label, "inbound");
+            }
+        }
+
+        using var sourceDocument = JsonDocument.Parse(selected.SourceDataJson);
+        var sourceData = FoundData(sourceDocument.RootElement);
+        var references = EnumerateReferences(sourceData)
+            .Select(reference => new
+            {
+                Reference = reference,
+                TargetType = InferTargetType(reference.PropertyName)
+            })
+            .Where(reference => reference.TargetType is not null)
+            .ToList();
+        var targetTypes = references
+            .Select(reference => reference.TargetType!)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var targetValues = references
+            .Select(reference => reference.Reference.Value)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (targetTypes.Length > 0 && targetValues.Length > 0)
+        {
+            var directTargets = await dbContext.CuratedDomainObjects
+                .AsNoTracking()
+                .Where(entity => targetTypes.Contains(entity.DomainObjectType)
+                    && (targetValues.Contains(entity.SourceKey)
+                        || targetValues.Contains(entity.DisplayName)))
+                .ToListAsync(cancellationToken);
+            foreach (var target in directTargets)
+            {
+                var reference = references.FirstOrDefault(candidate =>
+                    candidate.TargetType == target.DomainObjectType
+                    && (candidate.Reference.Value.Equals(target.SourceKey, StringComparison.OrdinalIgnoreCase)
+                        || candidate.Reference.Value.Equals(target.DisplayName, StringComparison.OrdinalIgnoreCase)));
+                if (reference is not null)
+                {
+                    AddLink(target, HumanisePropertyName(reference.Reference.PropertyName), "outbound");
+                }
+            }
+        }
+
+        if (selected.DomainObjectType == "RunnerResult")
+        {
+            var identity = selected.SourceKey.Split(':');
+            if (identity.Length >= 3)
+            {
+                await AddByIdentityAsync("Race", string.Join(':', identity.Take(3)), "race", "outbound");
+            }
+            var trainerId = ReadText(sourceData, "trainerId");
+            if (trainerId is not null)
+            {
+                await AddByIdentityAsync("Stable", trainerId, "stable", "outbound");
+            }
+        }
+        else if (selected.DomainObjectType == "Race")
+        {
+            var runners = await dbContext.CuratedDomainObjects
+                .AsNoTracking()
+                .Where(entity => entity.DomainObjectType == "RunnerResult"
+                    && entity.SourceKey.StartsWith(selected.SourceKey + ":"))
+                .OrderBy(entity => entity.SourceKey)
+                .Take(requestedLimit + 1)
+                .ToListAsync(cancellationToken);
+            if (runners.Count > requestedLimit)
+            {
+                hasMore = true;
+            }
+            foreach (var runner in runners.Take(requestedLimit))
+            {
+                AddLink(runner, "runner result", "outbound");
+            }
+
+            var fixtureMatch = FixtureRaceSourceUri().Match(selected.SourceUrl);
+            if (fixtureMatch.Success)
+            {
+                await AddByIdentityAsync(
+                    "Meeting",
+                    $"{fixtureMatch.Groups["fixtureYear"].Value}:{fixtureMatch.Groups["fixtureId"].Value}",
+                    "meeting",
+                    "outbound");
+            }
+        }
+        else if (selected.DomainObjectType == "Meeting")
+        {
+            var identity = selected.SourceKey.Split(':');
+            if (identity.Length == 2)
+            {
+                var suffix = $"/bha/v1/fixtures/{identity[0]}/{identity[1]}/races";
+                var races = await dbContext.CuratedDomainObjects
+                    .AsNoTracking()
+                    .Where(entity => entity.DomainObjectType == "Race"
+                        && entity.SourceUrl.EndsWith(suffix))
+                    .OrderBy(entity => entity.SourceKey)
+                    .Take(requestedLimit + 1)
+                    .ToListAsync(cancellationToken);
+                if (races.Count > requestedLimit)
+                {
+                    hasMore = true;
+                }
+                foreach (var race in races.Take(requestedLimit))
+                {
+                    AddLink(race, "race", "outbound");
+                }
+            }
+        }
+
+        var inboundReference = selected.DomainObjectType switch
+        {
+            "Horse" => (SourceType: "RunnerResult", PropertyName: "animalId", Label: "runner result"),
+            "Jockey" => (SourceType: "RunnerResult", PropertyName: "jockeyId", Label: "runner result"),
+            "Trainer" => (SourceType: "RunnerResult", PropertyName: "trainerId", Label: "runner result"),
+            "Owner" => (SourceType: "RunnerResult", PropertyName: "ownerId", Label: "runner result"),
+            "Stable" => (SourceType: "RunnerResult", PropertyName: "trainerId", Label: "runner result"),
+            "Racecourse" => (SourceType: "Meeting", PropertyName: "courseId", Label: "meeting"),
+            _ => default
+        };
+        if (inboundReference != default)
+        {
+            await AddJsonReferrersAsync(
+                inboundReference.SourceType,
+                inboundReference.PropertyName,
+                selected.SourceKey,
+                inboundReference.Label);
+        }
+
+        if (selected.DomainObjectType == "Trainer")
+        {
+            await AddByIdentityAsync("Stable", selected.SourceKey, "stable", "outbound");
+        }
+        else if (selected.DomainObjectType == "Stable")
+        {
+            await AddByIdentityAsync("Trainer", selected.SourceKey, "trainer", "outbound");
+        }
+
+        return new CuratedEntityConnections(
+            DateTimeOffset.UtcNow,
+            ToEntity(selected),
+            links.Values
+                .OrderBy(link => link.Entity.DomainObjectType)
+                .ThenBy(link => link.Entity.DisplayName)
+                .ToList(),
+            hasMore);
     }
 
     public async Task<RelationshipGraph> GetRelationshipsAsync(
@@ -319,9 +548,13 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
         var totalRawRuns = await dbContext.RawCollectionRuns.CountAsync(cancellationToken);
         var failedRawRuns = await dbContext.RawCollectionRuns
             .CountAsync(run => run.Outcome == RawCollectionOutcome.Failed, cancellationToken);
+        var runningRawRuns = await dbContext.RawCollectionRuns
+            .CountAsync(run => run.Outcome == RawCollectionOutcome.Running, cancellationToken);
         var totalPromotionRuns = await dbContext.CuratedPromotionRuns.CountAsync(cancellationToken);
         var failedPromotionRuns = await dbContext.CuratedPromotionRuns
             .CountAsync(run => run.Outcome == CuratedPromotionOutcome.Failed, cancellationToken);
+        var runningPromotionRuns = await dbContext.CuratedPromotionRuns
+            .CountAsync(run => run.Outcome == CuratedPromotionOutcome.Running, cancellationToken);
 
         var rawRuns = await dbContext.RawCollectionRuns
             .AsNoTracking()
@@ -340,8 +573,10 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
             new AuditSummary(
                 totalRawRuns,
                 failedRawRuns,
+                runningRawRuns,
                 totalPromotionRuns,
                 failedPromotionRuns,
+                runningPromotionRuns,
                 rawRuns.FirstOrDefault()?.StartedAtUtc,
                 promotionRuns.FirstOrDefault()?.StartedAtUtc),
             rawRuns.Select(run => new RawRunAudit(
@@ -391,6 +626,21 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
             row.FirstObservedAtUtc,
             row.LastObservedAtUtc,
             ParseFoundData(row.SourceDataJson));
+
+    private static CuratedEntity ToEntity(CuratedDomainObject row) =>
+        ToEntity(new CuratedEntityRow(
+            row.Id,
+            row.SourceSystem,
+            row.DomainObjectType,
+            row.SourceKey,
+            row.DisplayName,
+            row.SourceUrl,
+            row.RawPayloadId,
+            row.RawCollectionRunId,
+            row.LastPromotionRunId,
+            row.FirstObservedAtUtc,
+            row.LastObservedAtUtc,
+            row.SourceDataJson));
 
     private static ParsedResultMeeting? ParseResultMeeting(ResultSourceRow row)
     {

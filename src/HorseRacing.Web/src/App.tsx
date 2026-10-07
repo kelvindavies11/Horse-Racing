@@ -9,6 +9,7 @@ import {
 } from "react";
 import type {
   AuditSnapshot,
+  CuratedEntityConnections,
   CuratedRaceResult,
   CuratedEntity,
   JsonValue,
@@ -18,6 +19,7 @@ import type {
   RelationshipNode,
   RunnerResultView,
 } from "./domain/curated";
+import { curatedRepository } from "./data/curatedRepository";
 import { useAudit, useCuratedData, useRaceCalendar, useRaceResults } from "./hooks/useCuratedData";
 
 type AppView = "results" | "calendar" | "explore" | "patterns" | "admin";
@@ -137,7 +139,7 @@ function App() {
         {view === "patterns" && <PatternsPage graph={curated.relationships} isLoading={curated.isLoading} error={curated.error} onRetry={curated.reload} />}
         {view === "admin" && <AdminPage {...audit} />}
       </main>
-      {selectedEntity && <EntityDrawer entity={selectedEntity} onClose={() => setSelectedEntity(undefined)} />}
+      {selectedEntity && <EntityDrawer entity={selectedEntity} onNavigate={setSelectedEntity} onClose={() => setSelectedEntity(undefined)} />}
     </div>
   );
 }
@@ -360,14 +362,55 @@ const EntityCard = ({ entity, index, onSelect }: { entity: CuratedEntity; index:
   return <button className="entity-card" type="button" style={typeStyle(entity.domainObjectType)} onClick={() => onSelect(entity)} data-testid="entity-card"><span className="entity-card-index">{String(index).padStart(3, "0")}</span><span className="entity-type"><i />{entity.domainObjectType}</span><span className="entity-arrow"><ArrowIcon /></span><strong>{entity.displayName}</strong><small className="source-key">{entity.sourceKey}</small><span className="signal-row">{signals.length > 0 ? signals.map(([key, value]) => <span key={key}><small>{titleCase(key)}</small>{String(value)}</span>) : <span><small>Source system</small>{entity.sourceSystem}</span>}</span><span className="entity-card-foot"><span>Last seen</span>{formatRelative(entity.lastObservedAtUtc)}</span></button>;
 };
 
-const EntityDrawer = ({ entity, onClose }: { entity: CuratedEntity; onClose: () => void }) => {
+const EntityDrawer = ({ entity, onNavigate, onClose }: { entity: CuratedEntity; onNavigate: (entity: CuratedEntity) => void; onClose: () => void }) => {
+  const [connections, setConnections] = useState<CuratedEntityConnections>();
+  const [connectionsError, setConnectionsError] = useState<string>();
+  const [connectionsLoading, setConnectionsLoading] = useState(true);
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
     document.addEventListener("keydown", handleKeyDown);
     document.body.classList.add("drawer-open");
     return () => { document.removeEventListener("keydown", handleKeyDown); document.body.classList.remove("drawer-open"); };
   }, [onClose]);
-  return <div className="drawer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><aside className="entity-drawer" role="dialog" aria-modal="true" aria-label={`${entity.displayName} details`} style={typeStyle(entity.domainObjectType)}><div className="drawer-head"><span className="entity-type"><i />{entity.domainObjectType}</span><button className="icon-button" type="button" onClick={onClose} aria-label="Close details"><CloseIcon /></button></div><div className="drawer-title"><p className="kicker">Curated entity</p><h2>{entity.displayName}</h2><code>{entity.sourceKey}</code></div><section className="drawer-section"><p className="drawer-label">Found data</p><div className="property-list">{Object.entries(entity.data).map(([key, value]) => <Property key={key} name={key} value={value} />)}</div></section><section className="drawer-section lineage"><p className="drawer-label">Observation & lineage</p><div className="lineage-timeline"><LineagePoint title="First observed" value={formatDateTime(entity.firstObservedAtUtc)} /><LineagePoint title="Last observed" value={formatDateTime(entity.lastObservedAtUtc)} active /></div><dl><div><dt>Raw payload</dt><dd title={entity.rawPayloadId}>{shortId(entity.rawPayloadId)}</dd></div><div><dt>Collection run</dt><dd title={entity.rawCollectionRunId}>{shortId(entity.rawCollectionRunId)}</dd></div><div><dt>Promotion run</dt><dd title={entity.lastPromotionRunId}>{shortId(entity.lastPromotionRunId)}</dd></div></dl></section><a className="source-link" href={entity.sourceUrl} target="_blank" rel="noreferrer"><span><small>Original source</small>{new URL(entity.sourceUrl).hostname}</span><ExternalIcon /></a><details className="json-details"><summary>View curated JSON</summary><pre>{JSON.stringify(entity.data, null, 2)}</pre></details></aside></div>;
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setConnections(undefined);
+    setConnectionsError(undefined);
+    setConnectionsLoading(true);
+    curatedRepository.getEntityConnections(entity.id, controller.signal)
+      .then((value) => {
+        setConnections(value);
+        setConnectionsLoading(false);
+      })
+      .catch((caught: unknown) => {
+        if (!controller.signal.aborted) {
+          setConnectionsError(caught instanceof Error ? caught.message : "Linked records could not be loaded.");
+          setConnectionsLoading(false);
+        }
+      });
+    return () => controller.abort();
+  }, [entity.id]);
+
+  return <div className="drawer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <aside className="entity-drawer" role="dialog" aria-modal="true" aria-label={`${entity.displayName} details`} style={typeStyle(entity.domainObjectType)}>
+      <div className="drawer-head"><span className="entity-type"><i />{entity.domainObjectType}</span><button className="icon-button" type="button" onClick={onClose} aria-label="Close details"><CloseIcon /></button></div>
+      <div className="drawer-title"><p className="kicker">Curated entity</p><h2>{entity.displayName}</h2><code>{entity.sourceKey}</code></div>
+      <section className="drawer-section"><p className="drawer-label">Found data</p><div className="property-list">{Object.entries(entity.data).map(([key, value]) => <Property key={key} name={key} value={value} />)}</div></section>
+      <section className="drawer-section linked-records">
+        <p className="drawer-label">Linked entity records</p>
+        {connectionsLoading && <p className="linked-records-state">Finding related records…</p>}
+        {!connectionsLoading && connectionsError && <p className="linked-records-state error">{connectionsError}</p>}
+        {!connectionsLoading && connections && connections.links.length === 0 && <p className="linked-records-state">No direct curated links were found for this record.</p>}
+        {!connectionsLoading && connections && connections.links.length > 0 && <div className="linked-record-list">{connections.links.map((link) => <button type="button" key={link.entity.id} style={typeStyle(link.entity.domainObjectType)} onClick={() => onNavigate(link.entity)}><i /><span><small>{link.direction} · {link.label} · {link.entity.domainObjectType}</small><strong>{link.entity.displayName}</strong><code>{link.entity.sourceKey}</code></span><ArrowIcon /></button>)}</div>}
+        {connections?.hasMore && <p className="linked-records-state">Showing the first 100 linked records.</p>}
+      </section>
+      <section className="drawer-section lineage"><p className="drawer-label">Observation & lineage</p><div className="lineage-timeline"><LineagePoint title="First observed" value={formatDateTime(entity.firstObservedAtUtc)} /><LineagePoint title="Last observed" value={formatDateTime(entity.lastObservedAtUtc)} active /></div><dl><div><dt>Raw payload</dt><dd title={entity.rawPayloadId}>{shortId(entity.rawPayloadId)}</dd></div><div><dt>Collection run</dt><dd title={entity.rawCollectionRunId}>{shortId(entity.rawCollectionRunId)}</dd></div><div><dt>Promotion run</dt><dd title={entity.lastPromotionRunId}>{shortId(entity.lastPromotionRunId)}</dd></div></dl></section>
+      <a className="source-link" href={entity.sourceUrl} target="_blank" rel="noreferrer"><span><small>Original source</small>{new URL(entity.sourceUrl).hostname}</span><ExternalIcon /></a>
+      <details className="json-details"><summary>View curated JSON</summary><pre>{JSON.stringify(entity.data, null, 2)}</pre></details>
+    </aside>
+  </div>;
 };
 
 const Property = ({ name, value }: { name: string; value: JsonValue }) => { const complex = typeof value === "object" && value !== null; return <div className={complex ? "property complex" : "property"}><span>{titleCase(name)}</span><strong>{complex ? JSON.stringify(value) : value === null ? "—" : String(value)}</strong></div>; };
@@ -441,18 +484,19 @@ const Neighbourhood = ({ hub, neighbours }: { hub: RelationshipNode; neighbours:
 
 const AdminPage = ({ data, error, isLoading, reload }: { data?: AuditSnapshot; error?: string; isLoading: boolean; reload: () => void }) => {
   const [tab, setTab] = useState<AuditTab>("raw");
-  const rawSuccess = data ? data.summary.totalRawRuns - data.summary.failedRawRuns : 0;
-  const promotionSuccess = data ? data.summary.totalPromotionRuns - data.summary.failedPromotionRuns : 0;
-  return <div className="page-wrap admin-page"><section className="hero hero--admin"><div><p className="kicker">Operations / read-only</p><h1>Pipeline,<br /><em>under oath.</em></h1></div><div className="hero-copy"><p>Every collection and promotion attempt, including failures, is visible here with its source, timing, version, payload and outcome.</p><span><i />Audit evidence is never edited here</span></div></section>{isLoading && <PageSkeleton />}{!isLoading && error && <ApiError message={error} onRetry={reload} />}{!isLoading && data && <><section className="metric-strip admin-metrics"><Metric value={number.format(data.summary.totalRawRuns)} label="Raw collections" note={`${number.format(rawSuccess)} non-failed`} index="01" /><Metric value={number.format(data.summary.totalPromotionRuns)} label="Curated promotions" note={`${number.format(promotionSuccess)} non-failed`} index="02" /><Metric value={number.format(data.summary.failedRawRuns + data.summary.failedPromotionRuns)} label="Recorded failures" note="Across both transitions" index="03" /></section><PipelineHealth data={data} /><section className="section-block audit-section"><div className="section-heading audit-heading"><div><p className="kicker">Run ledger</p><h2>Latest job activity</h2></div><div className="audit-tabs" role="tablist"><button type="button" role="tab" aria-selected={tab === "raw"} onClick={() => setTab("raw")}>Raw collection <span>{data.rawRuns.length}</span></button><button type="button" role="tab" aria-selected={tab === "curated"} onClick={() => setTab("curated")}>Curated promotion <span>{data.promotionRuns.length}</span></button></div></div>{tab === "raw" ? <RawAuditTable runs={data.rawRuns} /> : <PromotionAuditTable runs={data.promotionRuns} />}</section></>}</div>;
+  const runningJobs = data
+    ? data.summary.runningRawRuns + data.summary.runningPromotionRuns
+    : 0;
+  return <div className="page-wrap admin-page"><section className="hero hero--admin"><div><p className="kicker">Operations / read-only</p><h1>Pipeline,<br /><em>under oath.</em></h1></div><div className="hero-copy"><p>Every collection and promotion attempt, including failures, is visible here with its source, timing, version, payload and outcome.</p><span><i />Audit evidence refreshes every five seconds</span></div></section>{isLoading && <PageSkeleton />}{!isLoading && error && <ApiError message={error} onRetry={reload} />}{!isLoading && data && <><section className="metric-strip admin-metrics"><Metric value={number.format(runningJobs)} label="Jobs running" note={`${number.format(data.summary.runningRawRuns)} Raw · ${number.format(data.summary.runningPromotionRuns)} Curated`} index="01" /><Metric value={number.format(data.summary.totalRawRuns)} label="Raw collections" note={`${number.format(data.summary.failedRawRuns)} failed`} index="02" /><Metric value={number.format(data.summary.totalPromotionRuns)} label="Curated promotions" note={`${number.format(data.summary.failedPromotionRuns)} failed`} index="03" /><Metric value={number.format(data.summary.failedRawRuns + data.summary.failedPromotionRuns)} label="Recorded failures" note="Across both transitions" index="04" /></section><PipelineHealth data={data} /><section className="section-block audit-section"><div className="section-heading audit-heading"><div><p className="kicker">Run ledger</p><h2>Latest job activity</h2></div><div className="audit-tabs" role="tablist"><button type="button" role="tab" aria-selected={tab === "raw"} onClick={() => setTab("raw")}>Raw collection <span>{data.rawRuns.length}</span></button><button type="button" role="tab" aria-selected={tab === "curated"} onClick={() => setTab("curated")}>Curated promotion <span>{data.promotionRuns.length}</span></button></div></div>{tab === "raw" ? <RawAuditTable runs={data.rawRuns} /> : <PromotionAuditTable runs={data.promotionRuns} />}</section></>}</div>;
 };
 
-const PipelineHealth = ({ data }: { data: AuditSnapshot }) => { const hasFailures = data.summary.failedRawRuns + data.summary.failedPromotionRuns > 0; return <section className="pipeline-card"><div className="pipeline-title"><span><DatabaseIcon /></span><div><p className="kicker">Data journey</p><h2>Source to serving layer</h2></div><span className={hasFailures ? "pipeline-status warning" : "pipeline-status"}><i />{hasFailures ? "Review failures" : "No failures recorded"}</span></div><div className="pipeline-flow"><PipelineStage number="01" title="BHA sources" note="External responses" status="source" /><span className="flow-line"><i /></span><PipelineStage number="02" title="Raw layer" note={`Last run ${formatRelative(data.summary.lastRawRunAtUtc)}`} status={data.summary.failedRawRuns > 0 ? "warning" : "ok"} /><span className="flow-line"><i /></span><PipelineStage number="03" title="Curated layer" note={`Last run ${formatRelative(data.summary.lastPromotionRunAtUtc)}`} status={data.summary.failedPromotionRuns > 0 ? "warning" : "ok"} /></div></section>; };
+const PipelineHealth = ({ data }: { data: AuditSnapshot }) => { const hasFailures = data.summary.failedRawRuns + data.summary.failedPromotionRuns > 0; const runningJobs = data.summary.runningRawRuns + data.summary.runningPromotionRuns; return <section className="pipeline-card"><div className="pipeline-title"><span><DatabaseIcon /></span><div><p className="kicker">Data journey</p><h2>Source to serving layer</h2></div><span className={hasFailures ? "pipeline-status warning" : runningJobs > 0 ? "pipeline-status running" : "pipeline-status"}><i />{runningJobs > 0 ? `${runningJobs} ${runningJobs === 1 ? "job" : "jobs"} in progress` : hasFailures ? "Review failures" : "No failures recorded"}</span></div><div className="pipeline-flow"><PipelineStage number="01" title="BHA sources" note="External responses" status="source" /><span className="flow-line"><i /></span><PipelineStage number="02" title="Raw layer" note={`Last run ${formatRelative(data.summary.lastRawRunAtUtc)}`} status={data.summary.runningRawRuns > 0 ? "running" : data.summary.failedRawRuns > 0 ? "warning" : "ok"} /><span className="flow-line"><i /></span><PipelineStage number="03" title="Curated layer" note={`Last run ${formatRelative(data.summary.lastPromotionRunAtUtc)}`} status={data.summary.runningPromotionRuns > 0 ? "running" : data.summary.failedPromotionRuns > 0 ? "warning" : "ok"} /></div></section>; };
 const PipelineStage = ({ number: stage, title, note, status }: { number: string; title: string; note: string; status: string }) => <div className={`pipeline-stage ${status}`}><span>{stage}</span><i>{status === "warning" ? <AlertIcon /> : <TickIcon />}</i><strong>{title}</strong><small>{note}</small></div>;
 
-const RawAuditTable = ({ runs }: { runs: RawRunAudit[] }) => runs.length === 0 ? <AuditEmpty layer="Raw" /> : <div className="audit-table" role="table" aria-label="Raw collection runs"><div className="audit-row audit-row--head" role="row"><span>Outcome</span><span>Job / source</span><span>Started</span><span>Duration</span><span>Response</span><span>Payload</span></div>{runs.map((run) => <div className="audit-row" role="row" key={run.id}><span><Outcome value={run.outcome} /></span><span className="job-cell"><strong>{run.jobName}</strong><small>{run.sourceName} · v{run.collectorVersion}</small>{run.errorMessage && <em>{run.errorCode}: {run.errorMessage}</em>}</span><span>{formatDateTime(run.startedAtUtc)}</span><span>{formatDuration(run.startedAtUtc, run.completedAtUtc)}</span><span>{run.httpStatusCode ?? "—"}<small>{run.mediaType ?? "No media type"}</small></span><span title={run.payloadId ?? undefined}>{formatBytes(run.payloadBytes)}<small>{shortId(run.payloadId)}</small></span></div>)}</div>;
-const PromotionAuditTable = ({ runs }: { runs: PromotionRunAudit[] }) => runs.length === 0 ? <AuditEmpty layer="Curated" /> : <div className="audit-table" role="table" aria-label="Curated promotion runs"><div className="audit-row audit-row--head" role="row"><span>Outcome</span><span>Job / source</span><span>Started</span><span>Duration</span><span>Found</span><span>Upserted</span></div>{runs.map((run) => <div className="audit-row" role="row" key={run.id}><span><Outcome value={run.outcome} /></span><span className="job-cell"><strong>{run.jobName}</strong><small>{run.sourceJobName} · v{run.promoterVersion}</small>{run.errorMessage && <em>{run.errorCode}: {run.errorMessage}</em>}</span><span>{formatDateTime(run.startedAtUtc)}</span><span>{formatDuration(run.startedAtUtc, run.completedAtUtc)}</span><span>{number.format(run.recordsFound)}<small>records</small></span><span>{number.format(run.recordsUpserted)}<small>records</small></span></div>)}</div>;
+const RawAuditTable = ({ runs }: { runs: RawRunAudit[] }) => runs.length === 0 ? <AuditEmpty layer="Raw" /> : <div className="audit-table" role="table" aria-label="Raw collection runs"><div className="audit-row audit-row--head" role="row"><span>Status</span><span>Job / source</span><span>Started</span><span>Finished</span><span>Duration</span><span>Response</span><span>Payload</span></div>{runs.map((run) => <div className="audit-row" role="row" key={run.id}><span><Outcome value={run.outcome} /></span><span className="job-cell"><strong>{run.jobName}</strong><small>{run.sourceName} · v{run.collectorVersion}</small>{run.errorMessage && <em>{run.errorCode}: {run.errorMessage}</em>}</span><span>{formatDateTime(run.startedAtUtc)}</span><span>{run.completedAtUtc ? formatDateTime(run.completedAtUtc) : <strong className="in-progress">In progress</strong>}</span><span>{formatDuration(run.startedAtUtc, run.completedAtUtc)}</span><span>{run.httpStatusCode ?? "—"}<small>{run.mediaType ?? "No media type"}</small></span><span title={run.payloadId ?? undefined}>{formatBytes(run.payloadBytes)}<small>{shortId(run.payloadId)}</small></span></div>)}</div>;
+const PromotionAuditTable = ({ runs }: { runs: PromotionRunAudit[] }) => runs.length === 0 ? <AuditEmpty layer="Curated" /> : <div className="audit-table" role="table" aria-label="Curated promotion runs"><div className="audit-row audit-row--head" role="row"><span>Status</span><span>Job / source</span><span>Started</span><span>Finished</span><span>Duration</span><span>Found</span><span>Upserted</span></div>{runs.map((run) => <div className="audit-row" role="row" key={run.id}><span><Outcome value={run.outcome} /></span><span className="job-cell"><strong>{run.jobName}</strong><small>{run.sourceJobName} · v{run.promoterVersion}</small>{run.errorMessage && <em>{run.errorCode}: {run.errorMessage}</em>}</span><span>{formatDateTime(run.startedAtUtc)}</span><span>{run.completedAtUtc ? formatDateTime(run.completedAtUtc) : <strong className="in-progress">In progress</strong>}</span><span>{formatDuration(run.startedAtUtc, run.completedAtUtc)}</span><span>{number.format(run.recordsFound)}<small>records</small></span><span>{number.format(run.recordsUpserted)}<small>records</small></span></div>)}</div>;
 
-const Outcome = ({ value }: { value: string }) => <span className={`outcome outcome--${value.toLowerCase()}`}><i />{value}</span>;
+const Outcome = ({ value }: { value: string }) => <span className={`outcome outcome--${value.toLowerCase()}`}><i />{value === "Running" ? "In progress" : value}</span>;
 const AuditEmpty = ({ layer }: { layer: string }) => <div className="audit-empty"><ShieldIcon /><h3>No {layer.toLowerCase()} runs yet</h3><p>The ledger will populate after the corresponding local job has run.</p></div>;
 const Pagination = ({ current, total, onChange }: { current: number; total: number; onChange: (page: number) => void }) => total <= 1 ? null : <nav className="pagination" aria-label="Entity pages"><button type="button" disabled={current <= 1} onClick={() => onChange(current - 1)}><ChevronIcon left />Previous</button><span>Page <strong>{current}</strong> of {total}</span><button type="button" disabled={current >= total} onClick={() => onChange(current + 1)}>Next<ChevronIcon /></button></nav>;
 
