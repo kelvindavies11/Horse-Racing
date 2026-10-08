@@ -128,6 +128,7 @@ public sealed class ImportControlService
                 activePhaseId,
                 activeMonth,
                 activeStartedAtUtc,
+                isRunning,
                 isExecuting))
             .ToArray();
 
@@ -328,8 +329,10 @@ public sealed class ImportControlService
         string? activePhaseId,
         string? activeMonth,
         DateTimeOffset? activeStartedAtUtc,
+        bool isImportRunning,
         bool isExecuting)
     {
+        var waitingMonthAssigned = false;
         for (var month = definition.StartMonth; month <= definition.EndMonth; month = month.AddMonths(1))
         {
             var monthKey = month.ToString("yyyy-MM", CultureInfo.InvariantCulture);
@@ -339,8 +342,17 @@ public sealed class ImportControlService
             var isActive = isExecuting
                 && activePhaseId == definition.Id
                 && activeMonth == monthKey;
+            var isWaiting = !waitingMonthAssigned
+                && !isExecuting
+                && isImportRunning
+                && activePhaseId == definition.Id
+                && (latest is null
+                    || !string.Equals(latest.Status, "Succeeded", StringComparison.OrdinalIgnoreCase));
+            waitingMonthAssigned = waitingMonthAssigned || isWaiting;
             var status = isActive
                 ? "Running"
+                : isWaiting
+                    ? "Waiting"
                 : latest is null
                     ? "Queued"
                     : string.Equals(latest.Status, "Succeeded", StringComparison.OrdinalIgnoreCase)

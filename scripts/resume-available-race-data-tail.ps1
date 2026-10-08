@@ -78,40 +78,43 @@ function Test-BhaApiReady([string] $Token) {
     try {
         $probe = Invoke-WebRequest `
             -UseBasicParsing `
+            -SkipHttpErrorCheck `
             -Uri $apiProbeUri `
             -Headers $headers `
             -TimeoutSec 30
-        return $probe.StatusCode -eq 200
     }
     catch {
-        $responseProperty = $_.Exception.PSObject.Properties['Response']
-        $statusCode = if ($null -ne $responseProperty -and $null -ne $responseProperty.Value) {
-            [int] $responseProperty.Value.StatusCode
-        }
-        else {
-            0
-        }
-
-        if ($statusCode -in @(418, 429)) {
-            Write-Host (
-                '{0:o} BHA API is throttled (HTTP {1}); waiting {2} minutes.' -f
-                [datetime]::UtcNow,
-                $statusCode,
-                $ProbeIntervalMinutes)
-            return $false
-        }
-
-        if ($statusCode -in @(0, 401, 403)) {
-            $script:BhaProbeRetrySeconds = 60
-            Write-Host (
-                '{0:o} BHA API readiness probe returned {1}; refreshing the public token and retrying in one minute.' -f
-                [datetime]::UtcNow,
-                $(if ($statusCode -eq 0) { 'no HTTP status' } else { "HTTP $statusCode" }))
-            return $false
-        }
-
-        throw
+        $script:BhaProbeRetrySeconds = 60
+        Write-Host (
+            '{0:o} BHA API readiness probe returned no HTTP status; refreshing the public token and retrying in one minute.' -f
+            [datetime]::UtcNow)
+        return $false
     }
+
+    $statusCode = [int] $probe.StatusCode
+    if ($statusCode -eq 200) {
+        return $true
+    }
+
+    if ($statusCode -in @(418, 429)) {
+        Write-Host (
+            '{0:o} BHA API is throttled (HTTP {1}); waiting {2} minutes.' -f
+            [datetime]::UtcNow,
+            $statusCode,
+            $ProbeIntervalMinutes)
+        return $false
+    }
+
+    if ($statusCode -in @(401, 403)) {
+        $script:BhaProbeRetrySeconds = 60
+        Write-Host (
+            '{0:o} BHA API readiness probe returned HTTP {1}; refreshing the public token and retrying in one minute.' -f
+            [datetime]::UtcNow,
+            $statusCode)
+        return $false
+    }
+
+    throw "BHA API readiness probe returned unexpected HTTP $statusCode."
 }
 
 function Wait-ForExclusiveImportSlot {

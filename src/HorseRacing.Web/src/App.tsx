@@ -724,7 +724,7 @@ const ImportControlPage = ({
           <div><p className="kicker">{number.format(data.totalMonths)} monthly runners</p><h2>Dispatch queue</h2></div>
           <div className="queue-filters">
             <label><span>Phase</span><select value={phaseFilter} onChange={(event) => setPhaseFilter(event.target.value)}><option value="all">All phases</option>{data.phases.map((phase) => <option key={phase.id} value={phase.id}>{phase.name}</option>)}</select></label>
-            <label><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">All states</option><option value="Running">Running</option><option value="Succeeded">Succeeded</option><option value="Failed">Need retry</option><option value="Queued">Queued</option></select></label>
+            <label><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">All states</option><option value="Waiting">Waiting</option><option value="Running">Running</option><option value="Succeeded">Succeeded</option><option value="Failed">Need retry</option><option value="Queued">Queued</option></select></label>
           </div>
         </div>
         <div className="import-table" role="table" aria-label="Monthly import queue">
