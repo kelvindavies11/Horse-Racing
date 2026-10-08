@@ -170,7 +170,8 @@ foreach ($month in $months) {
     }
 
     $isSameRangeRetry = $attemptedRanges.Contains("$($month.From)|$($month.To)")
-    $month | Add-Member -NotePropertyName ReuseSuccessful -NotePropertyValue $isSameRangeRetry
+    $reuseSuccessful = $month.IsFinal -or $isSameRangeRetry
+    $month | Add-Member -NotePropertyName ReuseSuccessful -NotePropertyValue $reuseSuccessful
     $pendingMonths.Add($month)
 }
 
