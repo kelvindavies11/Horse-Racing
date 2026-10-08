@@ -4,6 +4,7 @@ import type {
   CuratedEntityPage,
   CuratedOverview,
   ImportControlSnapshot,
+  LatestRaceDateView,
   RaceResultsFeed,
   RelationshipGraph,
   StartImportResponse,
@@ -77,6 +78,10 @@ export const curatedRepository = {
     if (options?.to) parameters.set("to", options.to);
     const query = parameters.size > 0 ? `?${parameters}` : "";
     return readJson<RaceResultsFeed>(`/v1/curated/results${query}`, options?.signal);
+  },
+
+  getLatestRaceDate(signal?: AbortSignal) {
+    return readJson<LatestRaceDateView>("/v1/curated/results/latest-date", signal);
   },
 
   getAudit(signal?: AbortSignal) {

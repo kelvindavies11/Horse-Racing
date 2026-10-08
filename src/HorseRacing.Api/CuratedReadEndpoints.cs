@@ -52,6 +52,17 @@ public static class CuratedReadEndpoints
                 Results.Ok(await repository.GetRelationshipsAsync(limit ?? 500, cancellationToken)));
 
         curated.MapGet(
+            "/results/latest-date",
+            async (
+                ICuratedReadRepository repository,
+                CancellationToken cancellationToken) =>
+            {
+                var latest = await repository.GetLatestRaceDateAsync(cancellationToken)
+                    ?? DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1);
+                return Results.Ok(new LatestRaceDateView(latest));
+            });
+
+        curated.MapGet(
             "/results",
             async (
                 DateOnly? from,

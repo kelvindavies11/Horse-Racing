@@ -225,9 +225,9 @@ export const useRaceCalendar = (active: boolean) => {
 
     if (!month) {
       curatedRepository
-        .getResults({ signal: controller.signal })
+        .getLatestRaceDate(controller.signal)
         .then((latest) => {
-          if (!controller.signal.aborted) setMonth(latest.toDate.slice(0, 7));
+          if (!controller.signal.aborted) setMonth(latest.date.slice(0, 7));
         })
         .catch((caught: unknown) => {
           if (!controller.signal.aborted) {

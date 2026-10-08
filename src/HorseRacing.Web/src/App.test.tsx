@@ -288,6 +288,7 @@ beforeEach(() => {
     const url = new URL(typeof input === "string" ? input : input.toString(), "http://localhost");
     if (url.pathname.endsWith("/curated/overview")) return json(overview);
     if (url.pathname.endsWith("/curated/relationships")) return json(relationships);
+    if (url.pathname.endsWith("/curated/results/latest-date")) return json({ date: raceResults.toDate });
     if (url.pathname.endsWith("/curated/results")) return json(raceResults);
     if (url.pathname.endsWith("/admin/audit")) return json(audit);
     if (url.pathname.endsWith("/admin/imports")) return json(imports);

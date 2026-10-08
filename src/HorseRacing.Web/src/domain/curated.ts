@@ -144,6 +144,10 @@ export interface RaceResultsFeed {
   items: CuratedRaceResult[];
 }
 
+export interface LatestRaceDateView {
+  date: string;
+}
+
 export interface AuditSummary {
   totalRawRuns: number;
   failedRawRuns: number;

@@ -381,11 +381,18 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
             throw new ArgumentOutOfRangeException(nameof(toDate), "The result window must contain between 1 and 32 days.");
         }
 
-        var rows = await dbContext.CuratedDomainObjects
+        var fromDateText = fromDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var toDateText = toDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var raceRows = await dbContext.CuratedDomainObjects
+            .FromSqlInterpolated($"""
+                SELECT race.*
+                FROM curated.domain_objects AS race
+                WHERE race.source_system = {"BHA"}
+                  AND race.domain_object_type = {"Race"}
+                  AND (race.source_data -> 'foundData' ->> 'raceDate')
+                      BETWEEN {fromDateText} AND {toDateText}
+                """)
             .AsNoTracking()
-            .Where(item => item.DomainObjectType == "Meeting"
-                || item.DomainObjectType == "Race"
-                || item.DomainObjectType == "RunnerResult")
             .Select(item => new ResultSourceRow(
                 item.Id,
                 item.DomainObjectType,
@@ -395,15 +402,65 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
                 item.SourceDataJson))
             .ToListAsync(cancellationToken);
 
-        var meetings = rows
-            .Where(row => row.Type == "Meeting")
+        var races = raceRows
+            .Select(ParseResultRace)
+            .Where(item => item is not null)
+            .Select(item => item!)
+            .ToList();
+        if (races.Count == 0)
+        {
+            return EmptyRaceResultsFeed(fromDate, toDate);
+        }
+
+        var meetingSourceKeys = races
+            .Select(race => $"{race.FixtureYear}:{race.FixtureId}")
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var raceSourceKeys = races
+            .Select(race => race.Row.SourceKey)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        var meetingRows = await dbContext.CuratedDomainObjects
+            .AsNoTracking()
+            .Where(item => item.SourceSystem == "BHA"
+                && item.DomainObjectType == "Meeting"
+                && meetingSourceKeys.Contains(item.SourceKey))
+            .Select(item => new ResultSourceRow(
+                item.Id,
+                item.DomainObjectType,
+                item.SourceKey,
+                item.DisplayName,
+                item.SourceUrl,
+                item.SourceDataJson))
+            .ToListAsync(cancellationToken);
+        var runnerRows = await dbContext.CuratedDomainObjects
+            .FromSqlInterpolated($"""
+                SELECT runner.*
+                FROM curated.domain_objects AS runner
+                JOIN unnest({raceSourceKeys}) AS race_key(value)
+                  ON runner.source_key >= race_key.value || ':'
+                 AND runner.source_key < race_key.value || ';'
+                WHERE runner.source_system = {"BHA"}
+                  AND runner.domain_object_type = {"RunnerResult"}
+                """)
+            .AsNoTracking()
+            .Select(item => new ResultSourceRow(
+                item.Id,
+                item.DomainObjectType,
+                item.SourceKey,
+                item.DisplayName,
+                item.SourceUrl,
+                item.SourceDataJson))
+            .ToListAsync(cancellationToken);
+
+        var meetings = meetingRows
             .Select(ParseResultMeeting)
             .Where(item => item is not null)
             .Select(item => item!)
             .GroupBy(item => (item.FixtureYear, item.FixtureId))
             .ToDictionary(group => group.Key, group => group.Last());
-        var runners = rows
-            .Where(row => row.Type == "RunnerResult")
+        var runners = runnerRows
             .Select(ParseRunnerResult)
             .Where(item => item is not null)
             .Select(item => item!)
@@ -416,14 +473,6 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
                     .ThenBy(item => item.View.ClothNumber)
                     .Select(item => item.View)
                     .ToList());
-        var races = rows
-            .Where(row => row.Type == "Race")
-            .Select(ParseResultRace)
-            .Where(item => item is not null
-                && item.LocalDate >= fromDate
-                && item.LocalDate <= toDate)
-            .Select(item => item!)
-            .ToList();
         var raceIds = races.Select(race => race.Row.Id).ToList();
         var weatherRows = await dbContext.CuratedRaceWeather
             .AsNoTracking()
@@ -503,11 +552,24 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
 
     public async Task<DateOnly?> GetLatestRaceDateAsync(CancellationToken cancellationToken)
     {
-        var rows = await dbContext.CuratedDomainObjects
+        var row = await dbContext.CuratedDomainObjects
+            .FromSqlRaw("""
+                SELECT race.*
+                FROM curated.domain_objects AS race
+                WHERE race.source_system = 'BHA'
+                  AND race.domain_object_type = 'Race'
+                  AND (race.source_data -> 'foundData' ->> 'raceDate') IS NOT NULL
+                  AND EXISTS (
+                      SELECT 1
+                      FROM curated.domain_objects AS runner
+                      WHERE runner.source_system = race.source_system
+                        AND runner.domain_object_type = 'RunnerResult'
+                        AND runner.source_key >= race.source_key || ':'
+                        AND runner.source_key < race.source_key || ';')
+                ORDER BY (race.source_data -> 'foundData' ->> 'raceDate') DESC
+                LIMIT 1
+                """)
             .AsNoTracking()
-            .Where(item => item.DomainObjectType == "Meeting"
-                || item.DomainObjectType == "Race"
-                || item.DomainObjectType == "RunnerResult")
             .Select(item => new ResultSourceRow(
                 item.Id,
                 item.DomainObjectType,
@@ -515,30 +577,13 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
                 item.DisplayName,
                 item.SourceUrl,
                 item.SourceDataJson))
-            .ToListAsync(cancellationToken);
+            .SingleOrDefaultAsync(cancellationToken);
 
-        var meetingKeys = rows
-            .Where(row => row.Type == "Meeting")
-            .Select(ParseResultMeeting)
-            .Where(item => item is not null)
-            .Select(item => (item!.FixtureYear, item.FixtureId))
-            .ToHashSet();
-        var runnerKeys = rows
-            .Where(row => row.Type == "RunnerResult")
-            .Select(ParseRunnerResult)
-            .Where(item => item is not null)
-            .Select(item => (item!.RaceYear, item.RaceId, item.DivisionSequence))
-            .ToHashSet();
-
-        return rows
-            .Where(row => row.Type == "Race")
-            .Select(ParseResultRace)
-            .Where(item => item is not null
-                && meetingKeys.Contains((item.FixtureYear, item.FixtureId))
-                && runnerKeys.Contains((item.RaceYear, item.RaceId, item.DivisionSequence)))
-            .Select(item => (DateOnly?)item!.LocalDate)
-            .Max();
+        return row is null ? null : ParseResultRace(row)?.LocalDate;
     }
+
+    private static RaceResultsFeed EmptyRaceResultsFeed(DateOnly fromDate, DateOnly toDate) =>
+        new(DateTimeOffset.UtcNow, fromDate, toDate, 0, 0, 0, []);
 
     public async Task<AuditSnapshot> GetAuditAsync(
         int limit,

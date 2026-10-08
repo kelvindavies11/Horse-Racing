@@ -72,6 +72,8 @@ public sealed record RaceResultsFeed(
     int WeatherEnrichedRaces,
     IReadOnlyCollection<CuratedRaceResult> Items);
 
+public sealed record LatestRaceDateView(DateOnly Date);
+
 public sealed record CuratedRaceResult(
     Guid Id,
     string SourceKey,
