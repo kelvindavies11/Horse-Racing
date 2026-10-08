@@ -142,13 +142,14 @@ function Get-SucceededMonthCount {
 function Wait-ForExclusiveImportSlot {
     while ($true) {
         $otherImports = @(Get-CimInstance Win32_Process | Where-Object {
+            $isWorker = $_.Name -match '^dotnet(?:\.exe)?$' -and
+                ($_.CommandLine -match 'HorseRacing\.RaceDataSync' -or
+                    $_.CommandLine -match 'HorseRacing\.Bha\.CuratedPromoter')
+            $isSupervisor = $_.Name -match '^pwsh(?:\.exe)?$' -and
+                $_.CommandLine -match '-File\s+.*(?:resume-after-throttle|resume-monthly-race-data-history|resume-available-race-data-tail)\.ps1(?:"|\s|$)'
             $_.ProcessId -ne $PID -and
             -not [string]::IsNullOrWhiteSpace($_.CommandLine) -and
-            ($_.CommandLine -match 'HorseRacing\.RaceDataSync' -or
-                $_.CommandLine -match 'HorseRacing\.Bha\.CuratedPromoter' -or
-                $_.CommandLine -match 'resume-after-throttle\.ps1' -or
-                $_.CommandLine -match 'resume-monthly-race-data-history\.ps1' -or
-                $_.CommandLine -match 'resume-available-race-data-tail\.ps1')
+            ($isWorker -or $isSupervisor)
         })
 
         if ($otherImports.Count -eq 0) {
