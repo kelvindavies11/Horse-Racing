@@ -38,7 +38,7 @@ Use the restartable monthly runner for longer periods. The fast path deliberatel
 
 The runner records one immutable status row per monthly attempt and skips months that have already succeeded. Weather is deferred from this fast Raw-to-Curated import path; run `RaceDataSync --mode weather` separately after the result archive is current.
 
-The reviewed Admin import plan is a clean 2026 pass. Because future results do not exist yet, it uses the date-aware available-results runner:
+The reviewed Admin import plans expose a clean 2026 pass plus separate, manually started annual archive passes for 2024, 2023, 2022, 2021 and 2020. Because future 2026 results do not exist yet, that phase uses the date-aware available-results runner:
 
 ```powershell
 ./scripts/resume-available-race-data-tail.ps1 `
@@ -49,6 +49,8 @@ The reviewed Admin import plan is a clean 2026 pass. Because future results do n
 ```
 
 The resume process refreshes and validates the public BHA results-client token using the official-site workflow, waits through `418`/`429` throttling, and refuses to run alongside another Raw, Curated or resume process. The runner bounds the current month at today's Europe/London date, reruns that month when a later day becomes available, and only records a final month when its calendar end has been reached. Successful source payloads are reused by exact job name and source URL when retrying the same range. On completion it performs the idempotent participant backfill used by Explore.
+
+The completed-year phases use `resume-monthly-race-data-history.ps1` with isolated state directories such as `artifacts/2024-results-sync`. They are defined in Import Control but are never launched automatically; use the web application's two-step start control when the single-runner slot is free.
 
 ## API and website
 

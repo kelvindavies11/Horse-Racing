@@ -220,10 +220,10 @@ const imports: ImportControlSnapshot = {
   activeMonth: "2026-10",
   activeStartedAtUtc: "2026-10-07T17:30:00Z",
   activeProcessCount: 2,
-  totalMonths: 12,
+  totalMonths: 72,
   succeededMonths: 2,
   failedMonths: 0,
-  queuedMonths: 9,
+  queuedMonths: 69,
   phases: [{
     id: "year-2026",
     name: "2026 results",
@@ -238,7 +238,21 @@ const imports: ImportControlSnapshot = {
     status: "Running",
     canStart: false,
     startBlocker: "Another import owns the single-runner slot.",
-  }],
+  }, ...[2024, 2023, 2022, 2021, 2020].map((year) => ({
+    id: `year-${year}`,
+    name: `${year} results`,
+    description: `A restartable Raw-to-Curated archive pass for ${year}.`,
+    startMonth: `${year}-01`,
+    endMonth: `${year}-12`,
+    totalMonths: 12,
+    succeededMonths: 0,
+    failedMonths: 0,
+    queuedMonths: 12,
+    runningMonths: 0,
+    status: "Queued",
+    canStart: false,
+    startBlocker: "Another import owns the single-runner slot.",
+  }))],
   jobs: [{
     id: "year-2026:2026-10",
     phaseId: "year-2026",
@@ -388,10 +402,12 @@ describe("curated data workspace", () => {
     await user.click(screen.getByRole("button", { name: /Import control/i }));
 
     expect(await screen.findByRole("heading", { level: 2, name: "2026 results" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 3, name: "2024 results" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 3, name: "2020 results" })).toBeInTheDocument();
     expect(screen.getByRole("table", { name: "Monthly import queue" })).toBeInTheDocument();
     expect(screen.getByText("October 2026")).toBeInTheDocument();
     expect(screen.getByText("Protected processes")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Start phase" })).toBeDisabled();
+    expect(screen.getAllByRole("button", { name: "Start phase" }).every((button) => button.hasAttribute("disabled"))).toBe(true);
   });
 
   it("navigates a calendar meeting through race tabs and complete runner details", async () => {

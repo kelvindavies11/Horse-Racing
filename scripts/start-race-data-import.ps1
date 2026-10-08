@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
-    [ValidateSet('year-2026')]
+    [ValidateSet('year-2026', 'year-2024', 'year-2023', 'year-2022', 'year-2021', 'year-2020')]
     [string] $PhaseId
 )
 
@@ -17,6 +17,36 @@ $phases = @{
         StartMonth = '2026-01'
         EndMonth = '2026-12'
         StateDirectory = 'artifacts/2026-results-sync'
+    }
+    'year-2024' = @{
+        Script = 'resume-monthly-race-data-history.ps1'
+        StartMonth = '2024-01'
+        EndMonth = '2024-12'
+        StateDirectory = 'artifacts/2024-results-sync'
+    }
+    'year-2023' = @{
+        Script = 'resume-monthly-race-data-history.ps1'
+        StartMonth = '2023-01'
+        EndMonth = '2023-12'
+        StateDirectory = 'artifacts/2023-results-sync'
+    }
+    'year-2022' = @{
+        Script = 'resume-monthly-race-data-history.ps1'
+        StartMonth = '2022-01'
+        EndMonth = '2022-12'
+        StateDirectory = 'artifacts/2022-results-sync'
+    }
+    'year-2021' = @{
+        Script = 'resume-monthly-race-data-history.ps1'
+        StartMonth = '2021-01'
+        EndMonth = '2021-12'
+        StateDirectory = 'artifacts/2021-results-sync'
+    }
+    'year-2020' = @{
+        Script = 'resume-monthly-race-data-history.ps1'
+        StartMonth = '2020-01'
+        EndMonth = '2020-12'
+        StateDirectory = 'artifacts/2020-results-sync'
     }
 }
 

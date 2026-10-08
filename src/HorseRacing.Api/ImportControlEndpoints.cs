@@ -73,6 +73,9 @@ public sealed class ImportControlService
     private static readonly Regex MonthArgumentPattern = new(
         @"--from\s+(?<month>\d{4}-\d{2})-\d{2}",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+    private static readonly Regex SupervisorStartMonthPattern = new(
+        @"-StartMonth\s+""?(?<month>\d{4}-\d{2})",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     private static readonly JsonSerializerOptions ProcessJsonOptions = new()
     {
@@ -81,13 +84,12 @@ public sealed class ImportControlService
 
     private static readonly ImportPhaseDefinition[] Definitions =
     [
-        new(
-            "year-2026",
-            "2026 results",
-            "A clean Raw-to-Curated pass for 2026, refreshed as new results become available.",
-            new DateOnly(2026, 1, 1),
-            new DateOnly(2026, 12, 1),
-            "artifacts/2026-results-sync"),
+        CreateYearPhase(2026, "A clean Raw-to-Curated pass for 2026, refreshed as new results become available."),
+        CreateYearPhase(2024),
+        CreateYearPhase(2023),
+        CreateYearPhase(2022),
+        CreateYearPhase(2021),
+        CreateYearPhase(2020),
     ];
 
     private readonly ILogger<ImportControlService> logger;
@@ -377,10 +379,26 @@ public sealed class ImportControlService
                 monthDate >= definition.StartMonth && monthDate <= definition.EndMonth)?.Id;
         }
 
-        var commandLine = processes
-            .Select(process => process.CommandLine)
-            .FirstOrDefault(command => command.Contains("resume-available-race-data-tail.ps1", StringComparison.OrdinalIgnoreCase));
-        return commandLine is null ? null : "year-2026";
+        var supervisor = processes.FirstOrDefault(process =>
+            process.CommandLine.Contains("resume-available-race-data-tail.ps1", StringComparison.OrdinalIgnoreCase)
+            || process.CommandLine.Contains("resume-monthly-race-data-history.ps1", StringComparison.OrdinalIgnoreCase));
+        if (supervisor is null)
+        {
+            return null;
+        }
+
+        var startMonth = SupervisorStartMonthPattern.Match(supervisor.CommandLine).Groups["month"].Value;
+        if (!DateOnly.TryParseExact(
+                $"{startMonth}-01",
+                "yyyy-MM-dd",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var startDate))
+        {
+            return null;
+        }
+
+        return Definitions.FirstOrDefault(definition => definition.StartMonth == startDate)?.Id;
     }
 
     private static string? GetActiveMonth(ObservedImportProcess? process)
@@ -509,6 +527,15 @@ public sealed class ImportControlService
 
         throw new InvalidOperationException("The Horse Racing repository root could not be found.");
     }
+
+    private static ImportPhaseDefinition CreateYearPhase(int year, string? description = null) =>
+        new(
+            $"year-{year}",
+            $"{year} results",
+            description ?? $"A restartable Raw-to-Curated archive pass for {year}.",
+            new DateOnly(year, 1, 1),
+            new DateOnly(year, 12, 1),
+            $"artifacts/{year}-results-sync");
 
     private static string SanitiseProcessMessage(string message)
     {
