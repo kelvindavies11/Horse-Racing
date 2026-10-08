@@ -70,6 +70,7 @@ public static class ImportControlEndpoints
 
 public sealed class ImportControlService
 {
+    private const int MaximumRawWorkers = 5;
     private static readonly Regex MonthArgumentPattern = new(
         @"--from\s+(?<month>\d{4}-\d{2})-\d{2}",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
@@ -113,11 +114,25 @@ public sealed class ImportControlService
     public async Task<ImportControlSnapshot> GetSnapshotAsync(CancellationToken cancellationToken)
     {
         var observedProcesses = await GetImportProcessesAsync(cancellationToken);
-        var activeProcess = observedProcesses.FirstOrDefault(process =>
-            process.CommandLine.Contains("HorseRacing.RaceDataSync", StringComparison.OrdinalIgnoreCase)
-            || process.CommandLine.Contains("HorseRacing.Bha.CuratedPromoter", StringComparison.OrdinalIgnoreCase));
+        var activeRawProcesses = observedProcesses
+            .Where(process => process.CommandLine.Contains(
+                "HorseRacing.RaceDataSync",
+                StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        var activeProcess = activeRawProcesses.FirstOrDefault()
+            ?? observedProcesses.FirstOrDefault(process => process.CommandLine.Contains(
+                "HorseRacing.Bha.CuratedPromoter",
+                StringComparison.OrdinalIgnoreCase));
         var activePhaseId = FindActivePhaseId(observedProcesses, activeProcess);
-        var activeMonth = GetActiveMonth(activeProcess);
+        var activeMonths = activeRawProcesses
+            .Select(process => new { Process = process, Month = GetActiveMonth(process) })
+            .Where(item => item.Month is not null)
+            .GroupBy(item => item.Month!, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Min(item => item.Process.StartedAtUtc),
+                StringComparer.Ordinal);
+        var activeMonth = activeMonths.Keys.OrderBy(month => month, StringComparer.Ordinal).FirstOrDefault();
         var activeStartedAtUtc = observedProcesses.Count == 0
             ? (DateTimeOffset?)null
             : observedProcesses.Min(process => process.StartedAtUtc);
@@ -133,8 +148,7 @@ public sealed class ImportControlService
                 definition,
                 phaseRows[definition.Id],
                 activePhaseId,
-                activeMonth,
-                activeStartedAtUtc,
+                activeMonths,
                 isRunning,
                 isExecuting))
             .ToArray();
@@ -156,7 +170,7 @@ public sealed class ImportControlService
             else if (isRunning)
             {
                 canStart = false;
-                blocker = "Another import owns the single-runner slot.";
+                blocker = "Another import phase owns the five-runner pool.";
             }
 
             var status = activePhaseId == definition.Id
@@ -191,8 +205,11 @@ public sealed class ImportControlService
             waitStatus?.NextRetryAtUtc,
             activePhaseId,
             activeMonth,
+            activeMonths.Keys.OrderBy(month => month, StringComparer.Ordinal).ToArray(),
             activeStartedAtUtc,
             observedProcesses.Count,
+            activeRawProcesses.Length,
+            MaximumRawWorkers,
             jobs.Length,
             jobs.Count(job => job.Status == "Succeeded"),
             jobs.Count(job => job.Status == "Failed"),
@@ -271,7 +288,7 @@ public sealed class ImportControlService
                 "Started import phase {PhaseId} in process {ProcessId}.",
                 phaseId,
                 processId);
-            return new(true, $"{definition.Name} was placed in the single-runner slot.", processId);
+            return new(true, $"{definition.Name} was placed in the five-runner pool.", processId);
         }
         finally
         {
@@ -407,21 +424,23 @@ public sealed class ImportControlService
             return null;
         }
 
-        _ = int.TryParse(fields[4], CultureInfo.InvariantCulture, out var exitCode);
+        var statusIndex = fields.Length >= 8 ? 5 : 3;
+        var exitCodeIndex = fields.Length >= 8 ? 6 : 4;
+        var completedAtIndex = fields.Length >= 8 ? 7 : 5;
+        _ = int.TryParse(fields[exitCodeIndex], CultureInfo.InvariantCulture, out var exitCode);
         _ = DateTimeOffset.TryParse(
-            fields[5],
+            fields[completedAtIndex],
             CultureInfo.InvariantCulture,
             DateTimeStyles.AssumeUniversal,
             out var completedAtUtc);
-        return new(from, to, fields[3], exitCode, completedAtUtc);
+        return new(from, to, fields[statusIndex], exitCode, completedAtUtc);
     }
 
     private static IEnumerable<ImportMonthJob> BuildJobs(
         ImportPhaseDefinition definition,
         IReadOnlyList<ImportProgressRow> rows,
         string? activePhaseId,
-        string? activeMonth,
-        DateTimeOffset? activeStartedAtUtc,
+        IReadOnlyDictionary<string, DateTimeOffset> activeMonths,
         bool isImportRunning,
         bool isExecuting)
     {
@@ -432,9 +451,8 @@ public sealed class ImportControlService
             var attempts = rows.Where(row =>
                 row.From.Year == month.Year && row.From.Month == month.Month).ToArray();
             var latest = attempts.LastOrDefault();
-            var isActive = isExecuting
-                && activePhaseId == definition.Id
-                && activeMonth == monthKey;
+            var hasActiveWorker = activeMonths.TryGetValue(monthKey, out var monthStartedAtUtc);
+            var isActive = activePhaseId == definition.Id && hasActiveWorker;
             var isWaiting = !waitingMonthAssigned
                 && !isExecuting
                 && isImportRunning
@@ -461,7 +479,7 @@ public sealed class ImportControlService
                 month.AddMonths(1).AddDays(-1),
                 status,
                 attempts.Length,
-                isActive ? activeStartedAtUtc : null,
+                isActive ? monthStartedAtUtc : null,
                 latest?.CompletedAtUtc,
                 latest?.ExitCode);
         }
@@ -688,8 +706,11 @@ public sealed record ImportControlSnapshot(
     DateTimeOffset? NextRetryAtUtc,
     string? ActivePhaseId,
     string? ActiveMonth,
+    IReadOnlyList<string> ActiveMonths,
     DateTimeOffset? ActiveStartedAtUtc,
     int ActiveProcessCount,
+    int ActiveWorkerCount,
+    int MaximumWorkerCount,
     int TotalMonths,
     int SucceededMonths,
     int FailedMonths,

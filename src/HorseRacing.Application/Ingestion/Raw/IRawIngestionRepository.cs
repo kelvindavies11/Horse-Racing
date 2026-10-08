@@ -7,12 +7,14 @@ public interface IRawIngestionRepository
         Uri sourceUri,
         CancellationToken cancellationToken);
 
-    Task<DateTimeOffset?> GetLatestStartAsync(
+    Task<RawCollectionResult?> GetLatestAsync(
+        string jobName,
         Uri sourceUri,
         CancellationToken cancellationToken);
 
-    Task StartAsync(
+    Task<bool> TryStartAsync(
         RawCollectionStart collectionRun,
+        TimeSpan minimumRequestInterval,
         CancellationToken cancellationToken);
 
     Task FinishAsync(

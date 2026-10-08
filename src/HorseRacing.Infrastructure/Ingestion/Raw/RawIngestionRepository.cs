@@ -4,7 +4,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace HorseRacing.Infrastructure.Ingestion.Raw;
 
-public sealed class RawIngestionRepository(HorseRacingDbContext dbContext)
+public sealed class RawIngestionRepository(
+    HorseRacingDbContext dbContext,
+    TimeProvider timeProvider)
     : IRawIngestionRepository
 {
     public async Task<RawCollectionResult?> GetLatestSuccessfulAsync(
@@ -38,21 +40,108 @@ public sealed class RawIngestionRepository(HorseRacingDbContext dbContext)
                 payload.Content);
     }
 
-    public Task<DateTimeOffset?> GetLatestStartAsync(
+    public async Task<RawCollectionResult?> GetLatestAsync(
+        string jobName,
         Uri sourceUri,
-        CancellationToken cancellationToken) =>
-        dbContext.RawCollectionRuns
-            .Where(run => run.SourceUrl == sourceUri.AbsoluteUri)
-            .OrderByDescending(run => run.StartedAtUtc)
-            .Select(run => (DateTimeOffset?)run.StartedAtUtc)
-            .FirstOrDefaultAsync(cancellationToken);
-
-    public async Task StartAsync(
-        RawCollectionStart collectionRun,
         CancellationToken cancellationToken)
     {
-        dbContext.RawCollectionRuns.Add(RawCollectionRun.Create(collectionRun));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        var run = await dbContext.RawCollectionRuns
+            .AsNoTracking()
+            .Include(item => item.Payload)
+            .Where(item =>
+                item.JobName == jobName
+                && item.SourceUrl == sourceUri.AbsoluteUri)
+            .OrderByDescending(run => run.StartedAtUtc)
+            .ThenByDescending(run => run.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return run is null
+            ? null
+            : new RawCollectionResult(
+                run.Id,
+                run.Outcome,
+                run.Payload?.Id,
+                run.HttpStatusCode,
+                run.ErrorCode,
+                run.ErrorMessage,
+                run.Payload?.Content);
+    }
+
+    public async Task<bool> TryStartAsync(
+        RawCollectionStart collectionRun,
+        TimeSpan minimumRequestInterval,
+        CancellationToken cancellationToken)
+    {
+        var requestScope = $"raw-http:{collectionRun.SourceUri.Scheme}://{collectionRun.SourceUri.Host}:{collectionRun.SourceUri.Port}";
+        var sourcePrefix = $"{collectionRun.SourceUri.Scheme}://{collectionRun.SourceUri.Authority}/";
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        try
+        {
+            await dbContext.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock(hashtext({requestScope}))",
+                cancellationToken);
+
+            var duplicateRun = await dbContext.RawCollectionRuns.SingleOrDefaultAsync(
+                run =>
+                    run.JobName == collectionRun.JobName
+                    && run.SourceUrl == collectionRun.SourceUri.AbsoluteUri
+                    && run.Outcome == RawCollectionOutcome.Running,
+                cancellationToken);
+            if (duplicateRun is not null)
+            {
+                var now = timeProvider.GetUtcNow();
+                if (now - duplicateRun.StartedAtUtc <= TimeSpan.FromMinutes(5))
+                {
+                    await transaction.CommitAsync(cancellationToken);
+                    return false;
+                }
+
+                duplicateRun.Finish(new RawCollectionCompletion(
+                    duplicateRun.Id,
+                    RawCollectionOutcome.Cancelled,
+                    now,
+                    null,
+                    null,
+                    "orphaned_runner",
+                    "The worker disappeared before completing this collection."));
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+
+            var latestStart = await dbContext.RawCollectionRuns
+                .Where(run => run.SourceUrl.StartsWith(sourcePrefix))
+                .OrderByDescending(run => run.StartedAtUtc)
+                .Select(run => (DateTimeOffset?)run.StartedAtUtc)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (latestStart is not null)
+            {
+                var remainingDelay = minimumRequestInterval
+                    - (timeProvider.GetUtcNow() - latestStart.Value);
+                if (remainingDelay > TimeSpan.Zero)
+                {
+                    await Task.Delay(remainingDelay, timeProvider, cancellationToken);
+                }
+            }
+
+            var actualStart = collectionRun with { StartedAtUtc = timeProvider.GetUtcNow() };
+            dbContext.RawCollectionRuns.Add(RawCollectionRun.Create(actualStart));
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return true;
+        }
+        catch
+        {
+            try
+            {
+                await transaction.RollbackAsync(CancellationToken.None);
+            }
+            finally
+            {
+                dbContext.ChangeTracker.Clear();
+            }
+
+            throw;
+        }
     }
 
     public async Task FinishAsync(

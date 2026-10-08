@@ -200,13 +200,8 @@ public sealed class CollectRaceResultsHistoryHandler(
                 sourceName,
                 sourceUri,
                 command.CollectorVersion,
-                TimeSpan.Zero),
+                command.DelayBetweenRequests),
             cancellationToken);
-
-        if (command.DelayBetweenRequests > TimeSpan.Zero)
-        {
-            await Task.Delay(command.DelayBetweenRequests, cancellationToken);
-        }
 
         return new CollectionAttempt(result, false);
     }

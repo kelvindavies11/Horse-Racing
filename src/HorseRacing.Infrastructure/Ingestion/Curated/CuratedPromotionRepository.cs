@@ -2,6 +2,7 @@ using HorseRacing.Application.Ingestion.Curated;
 using HorseRacing.Application.Ingestion.Raw;
 using HorseRacing.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace HorseRacing.Infrastructure.Ingestion.Curated;
 
@@ -16,10 +17,26 @@ public sealed class CuratedPromotionRepository(HorseRacingDbContext dbContext)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(batchSize);
 
+        var staleCutoff = DateTimeOffset.UtcNow.AddMinutes(-30);
+        await dbContext.CuratedPromotionRuns
+            .Where(run =>
+                run.Outcome == CuratedPromotionOutcome.Running
+                && run.StartedAtUtc < staleCutoff)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(run => run.Outcome, CuratedPromotionOutcome.Cancelled)
+                    .SetProperty(run => run.CompletedAtUtc, DateTimeOffset.UtcNow)
+                    .SetProperty(run => run.ErrorCode, "orphaned_runner")
+                    .SetProperty(
+                        run => run.ErrorMessage,
+                        "The promoter disappeared before completing this payload."),
+                cancellationToken);
+
         var excludedPayloadIds = dbContext.CuratedPromotionRuns
             .Where(run =>
                 run.Outcome == CuratedPromotionOutcome.Succeeded
                 || run.Outcome == CuratedPromotionOutcome.Skipped
+                || run.Outcome == CuratedPromotionOutcome.Running
                 || (!retryFailedPayloads && run.Outcome == CuratedPromotionOutcome.Failed))
             .Select(run => run.RawPayloadId);
 
@@ -59,12 +76,26 @@ public sealed class CuratedPromotionRepository(HorseRacingDbContext dbContext)
             .ToList();
     }
 
-    public async Task StartAsync(
+    public async Task<bool> TryStartAsync(
         CuratedPromotionStart promotionRun,
         CancellationToken cancellationToken)
     {
         dbContext.CuratedPromotionRuns.Add(CuratedPromotionRun.Create(promotionRun));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return true;
+        }
+        catch (DbUpdateException exception) when (
+            exception.InnerException is PostgresException
+            {
+                SqlState: PostgresErrorCodes.UniqueViolation,
+                ConstraintName: "ux_curated_promotion_runs_running_payload"
+            })
+        {
+            dbContext.ChangeTracker.Clear();
+            return false;
+        }
     }
 
     public async Task<int> FinishAsync(
@@ -75,6 +106,10 @@ public sealed class CuratedPromotionRepository(HorseRacingDbContext dbContext)
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         try
         {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                "SELECT pg_advisory_xact_lock(1899446294)",
+                cancellationToken);
+
             var run = await dbContext.CuratedPromotionRuns.SingleAsync(
                 item => item.Id == completion.PromotionRunId,
                 cancellationToken);

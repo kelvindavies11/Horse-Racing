@@ -75,6 +75,25 @@ public sealed class PromoteRawPayloadsHandlerTests
         Assert.Equal("mapping broke", finish.Completion.ErrorMessage);
     }
 
+    [Fact]
+    public async Task Payload_claimed_by_another_promoter_is_not_processed_twice()
+    {
+        var repository = new RecordingRepository(
+            [CreatePayload()],
+            recordsUpserted: 0,
+            canStart: false);
+        var handler = CreateHandler(
+            repository,
+            new ThrowingExtractor(new InvalidOperationException("Extractor must not run.")));
+
+        var result = await handler.HandleAsync(CreateCommand(), CancellationToken.None);
+
+        Assert.Equal(1, result.PayloadsSkipped);
+        Assert.Empty(repository.Starts);
+        Assert.Empty(repository.Finishes);
+        Assert.Equal("already_promoting", Assert.Single(result.PayloadResults).ErrorCode);
+    }
+
     private static PromoteRawPayloadsHandler CreateHandler(
         RecordingRepository repository,
         ICuratedRawPayloadExtractor extractor) =>
@@ -113,7 +132,8 @@ public sealed class PromoteRawPayloadsHandlerTests
 
     private sealed class RecordingRepository(
         IReadOnlyList<RawPayloadForPromotion> payloads,
-        int recordsUpserted) : ICuratedPromotionRepository
+        int recordsUpserted,
+        bool canStart = true) : ICuratedPromotionRepository
     {
         public List<CuratedPromotionStart> Starts { get; } = [];
 
@@ -128,12 +148,16 @@ public sealed class PromoteRawPayloadsHandlerTests
             CancellationToken cancellationToken) =>
             Task.FromResult(payloads);
 
-        public Task StartAsync(
+        public Task<bool> TryStartAsync(
             CuratedPromotionStart promotionRun,
             CancellationToken cancellationToken)
         {
-            Starts.Add(promotionRun);
-            return Task.CompletedTask;
+            if (canStart)
+            {
+                Starts.Add(promotionRun);
+            }
+
+            return Task.FromResult(canStart);
         }
 
         public Task<int> FinishAsync(

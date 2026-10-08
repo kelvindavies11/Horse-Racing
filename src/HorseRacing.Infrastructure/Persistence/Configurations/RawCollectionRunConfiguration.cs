@@ -43,6 +43,10 @@ public sealed class RawCollectionRunConfiguration
 
         builder.HasIndex(run => new { run.SourceUrl, run.StartedAtUtc })
             .HasDatabaseName("ix_raw_collection_runs_source_started");
+        builder.HasIndex(run => new { run.JobName, run.SourceUrl })
+            .IsUnique()
+            .HasFilter("outcome = 'Running'")
+            .HasDatabaseName("ux_raw_collection_runs_running_source");
 
         builder.HasOne(run => run.Payload)
             .WithOne(payload => payload.CollectionRun)

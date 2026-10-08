@@ -13,7 +13,10 @@ param(
 
     [switch] $DryRun,
 
-    [switch] $SkipBuild
+    [switch] $SkipBuild,
+
+    [ValidateRange(1, 5)]
+    [int] $MaxParallelism = 5
 )
 
 Set-StrictMode -Version Latest
@@ -23,6 +26,7 @@ $repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $rawProjectPath = Join-Path $repositoryRoot 'src\HorseRacing.RaceDataSync'
 $curatedProjectPath = Join-Path $repositoryRoot 'src\HorseRacing.Bha.CuratedPromoter'
 $solutionPath = Join-Path $repositoryRoot 'HorseRacing.sln'
+. (Join-Path $PSScriptRoot 'parallel-import-runner.ps1')
 $statePath = if ([System.IO.Path]::IsPathRooted($StateDirectory)) {
     [System.IO.Path]::GetFullPath($StateDirectory)
 }
@@ -139,6 +143,7 @@ if (-not $DryRun) {
 }
 
 $failedRanges = [System.Collections.Generic.List[string]]::new()
+$pendingMonths = [System.Collections.Generic.List[object]]::new()
 foreach ($month in $months) {
     $coveredTo = $successfulCoverage[$month.From]
     $targetTo = [datetime]::ParseExact($month.To, 'yyyy-MM-dd', $culture)
@@ -165,63 +170,61 @@ foreach ($month in $months) {
     }
 
     $isSameRangeRetry = $attemptedRanges.Contains("$($month.From)|$($month.To)")
-    Write-Output $(if ($isSameRangeRetry) {
-        '  Raw job: retrying only missing payloads for the same available range.'
-    }
-    else {
-        '  Raw job: refreshing the newly available range.'
-    })
-    $rawArguments = @(
-        'run',
-        '--no-build',
-        '--project',
-        $rawProjectPath,
-        '--',
-        '--mode',
-        'raw',
-        '--from',
-        $month.From,
-        '--to',
-        $month.To
-    )
-    if ($isSameRangeRetry) {
-        $rawArguments += '--reuse-successful'
-    }
-    & dotnet @rawArguments
-
-    $rawExitCode = $LASTEXITCODE
-
-    Write-Output '  Curated job: draining every pending Raw payload.'
-    & dotnet run --no-build --project $curatedProjectPath -- --drain
-    $curatedExitCode = $LASTEXITCODE
-
-    $exitCode = if ($rawExitCode -eq 0 -and $curatedExitCode -eq 0) { 0 } else { 1 }
-    $status = if ($exitCode -eq 0) { 'Succeeded' } else { 'Failed' }
-    [pscustomobject]@{
-        MonthIndex = $month.Index
-        From = $month.From
-        To = $month.To
-        TargetMonthEnd = $month.MonthEnd
-        IsFinal = $month.IsFinal
-        Status = $status
-        ExitCode = $exitCode
-        CompletedAtUtc = [datetime]::UtcNow.ToString('O', $culture)
-    } | Export-Csv -LiteralPath $progressPath -NoTypeInformation -Append
-
-    if ($exitCode -ne 0) {
-        $failedRanges.Add("$($month.From):$($month.To)")
-        Write-Warning (
-            'The available range {0} through {1} needs retrying (Raw exit {2}, Curated exit {3}).' -f
-            $month.From,
-            $month.To,
-            $rawExitCode,
-            $curatedExitCode)
-    }
+    $month | Add-Member -NotePropertyName ReuseSuccessful -NotePropertyValue $isSameRangeRetry
+    $pendingMonths.Add($month)
 }
 
 if ($DryRun) {
     Write-Output 'Dry run complete; no network requests or database writes were made.'
     return
+}
+
+for ($batchStart = 0; $batchStart -lt $pendingMonths.Count; $batchStart += $MaxParallelism) {
+    $batchEnd = [Math]::Min($batchStart + $MaxParallelism - 1, $pendingMonths.Count - 1)
+    $batch = @($pendingMonths[$batchStart..$batchEnd])
+    Write-Output (
+        'Launching Raw batch {0}-{1} with {2} protected runners.' -f
+        ($batchStart + 1),
+        ($batchEnd + 1),
+        $batch.Count)
+    $rawResults = @(Invoke-ParallelRawBatch `
+        -Months $batch `
+        -RawProjectPath $rawProjectPath `
+        -StatePath $statePath)
+
+    Write-Output '  Curated job: one serialized drain for the completed Raw batch.'
+    & dotnet run --no-build --project $curatedProjectPath -- --drain
+    $curatedExitCode = $LASTEXITCODE
+
+    foreach ($rawResult in $rawResults) {
+        $month = $rawResult.Month
+        $exitCode = if ($rawResult.ExitCode -eq 0 -and $curatedExitCode -eq 0) { 0 } else { 1 }
+        $status = if ($exitCode -eq 0) { 'Succeeded' } else { 'Failed' }
+        [pscustomobject]@{
+            MonthIndex = $month.Index
+            From = $month.From
+            To = $month.To
+            TargetMonthEnd = $month.MonthEnd
+            IsFinal = $month.IsFinal
+            Status = $status
+            ExitCode = $exitCode
+            CompletedAtUtc = [datetime]::UtcNow.ToString('O', $culture)
+        } | Export-Csv -LiteralPath $progressPath -NoTypeInformation -Append
+
+        if ($exitCode -ne 0) {
+            $failedRanges.Add("$($month.From):$($month.To)")
+            Write-Warning (
+                'The available range {0} through {1} needs retrying (Raw exit {2}, Curated exit {3}).' -f
+                $month.From,
+                $month.To,
+                $rawResult.ExitCode,
+                $curatedExitCode)
+        }
+    }
+
+    if ($failedRanges.Count -gt 0) {
+        break
+    }
 }
 
 if ($failedRanges.Count -gt 0) {

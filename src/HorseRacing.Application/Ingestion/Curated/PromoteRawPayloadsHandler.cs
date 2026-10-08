@@ -32,7 +32,7 @@ public sealed class PromoteRawPayloadsHandler(
             var promotionRunId = Guid.NewGuid();
             var startedAtUtc = timeProvider.GetUtcNow();
 
-            await repository.StartAsync(
+            var started = await repository.TryStartAsync(
                 new CuratedPromotionStart(
                     promotionRunId,
                     command.JobName,
@@ -45,6 +45,19 @@ public sealed class PromoteRawPayloadsHandler(
                     payload.Sha256,
                     startedAtUtc),
                 cancellationToken);
+
+            if (!started)
+            {
+                results.Add(new CuratedPayloadPromotionResult(
+                    promotionRunId,
+                    payload.PayloadId,
+                    CuratedPromotionOutcome.Skipped,
+                    0,
+                    0,
+                    "already_promoting",
+                    "Another promoter already owns this Raw payload."));
+                continue;
+            }
 
             CuratedPayloadPromotionResult result;
 

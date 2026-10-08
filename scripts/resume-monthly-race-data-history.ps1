@@ -15,7 +15,10 @@ param(
     [int] $ProbeIntervalMinutes = 15,
 
     [ValidateRange(1000, 10000)]
-    [int] $RequestDelayMilliseconds = 5000
+    [int] $RequestDelayMilliseconds = 5000,
+
+    [ValidateRange(1, 5)]
+    [int] $MaxParallelism = 5
 )
 
 Set-StrictMode -Version Latest
@@ -194,8 +197,9 @@ while ((Get-SucceededMonthCount) -lt $monthCount) {
     }
 
     Write-Output (
-        '{0:o} BHA API accepted the validation request; resuming restartable Raw jobs at {1} ms/request, each followed by a Curated drain.' -f
+        '{0:o} BHA API accepted the validation request; resuming with up to {1} Raw runners behind one shared {2} ms request gate, followed by one Curated drain per batch.' -f
         [datetime]::UtcNow,
+        $MaxParallelism,
         $RequestDelayMilliseconds)
 
     if ($buildCompleted) {
@@ -203,13 +207,15 @@ while ((Get-SucceededMonthCount) -lt $monthCount) {
             -StartMonth $StartMonth `
             -EndMonth $EndMonth `
             -StateDirectory $statePath `
+            -MaxParallelism $MaxParallelism `
             -SkipBuild
     }
     else {
         & $runnerPath `
             -StartMonth $StartMonth `
             -EndMonth $EndMonth `
-            -StateDirectory $statePath
+            -StateDirectory $statePath `
+            -MaxParallelism $MaxParallelism
         $buildCompleted = $true
     }
 

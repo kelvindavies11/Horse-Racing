@@ -672,7 +672,7 @@ const ImportControlPage = ({
   return <div className="page-wrap imports-page">
     <section className="hero hero--imports">
       <div><p className="kicker">Operations / guarded controls</p><h1>The queue,<br /><em>in plain sight.</em></h1></div>
-      <div className="hero-copy"><p>Watch every monthly runner move from queued to complete, then resume an eligible phase without opening a terminal.</p><span><i />One importer at a time · no force-stop control</span></div>
+      <div className="hero-copy"><p>Watch every monthly runner move from queued to complete, then resume an eligible phase without opening a terminal.</p><span><i />One guarded phase · up to five Raw runners · one Curated writer</span></div>
     </section>
     {isLoading && <PageSkeleton />}
     {!isLoading && error && <ApiError message={error} onRetry={reload} />}
@@ -680,20 +680,21 @@ const ImportControlPage = ({
       <section className={`runner-console runner-console--${data.runnerState.toLowerCase()}`} aria-label="Current import runner">
         <div className="runner-pulse"><span /><i /><b /></div>
         <div className="runner-copy">
-          <p className="kicker">Single-runner slot</p>
+          <p className="kicker">Protected five-runner pool</p>
           <h2>{data.isImportRunning ? activePhase?.name ?? "Import detected" : "Ready for dispatch"}</h2>
           <p>{data.isImportRunning
             ? data.runnerMessage
               ? data.runnerMessage
-              : data.activeMonth
-              ? `${calendarMonth.format(new Date(`${data.activeMonth}-01T00:00:00Z`))} is being collected, curated and weather-enriched.`
+              : data.activeMonths.length > 0
+              ? `${data.activeMonths.map((month) => calendarMonth.format(new Date(`${month}-01T00:00:00Z`))).join(", ")} ${data.activeMonths.length === 1 ? "is" : "are"} being collected behind one shared request gate.`
               : "The resume process is waiting for its next safe attempt."
-            : "No BHA import process is active. An eligible phase can claim the slot."}</p>
+            : "No BHA import process is active. An eligible phase can claim the worker pool."}</p>
         </div>
         <div className="runner-facts">
           <span><small>State</small><strong>{data.runnerState}</strong></span>
           <span><small>Next retry</small><strong>{data.nextRetryAtUtc ? formatDateTime(data.nextRetryAtUtc) : "—"}</strong></span>
           <span><small>Started</small><strong>{data.activeStartedAtUtc ? formatDateTime(data.activeStartedAtUtc) : "—"}</strong></span>
+          <span><small>Raw workers</small><strong>{number.format(data.activeWorkerCount)} / {number.format(data.maximumWorkerCount)}</strong></span>
           <span><small>Protected processes</small><strong>{number.format(data.activeProcessCount)}</strong></span>
         </div>
       </section>
@@ -773,7 +774,7 @@ const ImportPhaseCard = ({
     <div className="phase-range"><span>{phase.startMonth}</span><i /><span>{phase.endMonth}</span></div>
     <div className="phase-progress"><span><i /></span><small>{phase.succeededMonths} / {phase.totalMonths} succeeded · {progress}%</small></div>
     <div className="phase-counts"><span><strong>{phase.failedMonths}</strong> retry</span><span><strong>{phase.queuedMonths}</strong> queued</span><span><strong>{phase.runningMonths}</strong> running</span></div>
-    {armed ? <div className="phase-confirm" role="group" aria-label={`Confirm ${phase.name}`}><p>This will claim the single-runner slot and refresh the public BHA token.</p><button type="button" onClick={onStart} disabled={starting}>{starting ? "Starting…" : "Confirm dispatch"}</button><button type="button" onClick={onCancel}>Cancel</button></div> : <button className="phase-start" type="button" onClick={onStart} disabled={!phase.canStart || starting}>{starting ? "Starting…" : phase.failedMonths > 0 ? "Resume & retry" : "Start phase"}<ArrowIcon /></button>}
+    {armed ? <div className="phase-confirm" role="group" aria-label={`Confirm ${phase.name}`}><p>This will claim the five-runner pool and refresh the public BHA token.</p><button type="button" onClick={onStart} disabled={starting}>{starting ? "Starting…" : "Confirm dispatch"}</button><button type="button" onClick={onCancel}>Cancel</button></div> : <button className="phase-start" type="button" onClick={onStart} disabled={!phase.canStart || starting}>{starting ? "Starting…" : phase.failedMonths > 0 ? "Resume & retry" : "Start phase"}<ArrowIcon /></button>}
     {!armed && phase.startBlocker && <small className="phase-blocker">{phase.startBlocker}</small>}
   </article>;
 };

@@ -23,12 +23,10 @@ public sealed class CollectRawSourceHandler(
                 "The minimum request interval cannot be negative.");
         }
 
-        await RespectMinimumIntervalAsync(command, cancellationToken);
-
         var runId = Guid.NewGuid();
         var startedAtUtc = timeProvider.GetUtcNow();
 
-        await repository.StartAsync(
+        var started = await repository.TryStartAsync(
             new RawCollectionStart(
                 runId,
                 command.JobName,
@@ -36,7 +34,13 @@ public sealed class CollectRawSourceHandler(
                 command.SourceUri,
                 command.CollectorVersion,
                 startedAtUtc),
+            command.MinimumRequestInterval,
             cancellationToken);
+
+        if (!started)
+        {
+            return await WaitForConcurrentCollectionAsync(command, cancellationToken);
+        }
 
         RawSourceResponse response;
         try
@@ -116,25 +120,24 @@ public sealed class CollectRawSourceHandler(
             response.Content);
     }
 
-    private async Task RespectMinimumIntervalAsync(
+    private async Task<RawCollectionResult> WaitForConcurrentCollectionAsync(
         CollectRawSourceCommand command,
         CancellationToken cancellationToken)
     {
-        var latestStart = await repository.GetLatestStartAsync(
-            command.SourceUri,
-            cancellationToken);
-
-        if (latestStart is null)
+        while (true)
         {
-            return;
-        }
+            cancellationToken.ThrowIfCancellationRequested();
+            var latest = await repository.GetLatestAsync(
+                command.JobName,
+                command.SourceUri,
+                cancellationToken);
 
-        var remainingDelay = command.MinimumRequestInterval
-            - (timeProvider.GetUtcNow() - latestStart.Value);
+            if (latest is not null && latest.Outcome != RawCollectionOutcome.Running)
+            {
+                return latest;
+            }
 
-        if (remainingDelay > TimeSpan.Zero)
-        {
-            await Task.Delay(remainingDelay, timeProvider, cancellationToken);
+            await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken);
         }
     }
 

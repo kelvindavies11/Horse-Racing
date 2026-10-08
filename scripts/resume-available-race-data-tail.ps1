@@ -12,7 +12,10 @@ param(
     [int] $ProbeIntervalMinutes = 15,
 
     [ValidateRange(1000, 10000)]
-    [int] $RequestDelayMilliseconds = 5000
+    [int] $RequestDelayMilliseconds = 5000,
+
+    [ValidateRange(1, 5)]
+    [int] $MaxParallelism = 5
 )
 
 Set-StrictMode -Version Latest
@@ -169,14 +172,16 @@ while (-not (Test-BhaApiReady -Token $bhaToken)) {
 }
 
 Write-Output (
-    '{0:o} BHA API accepted the validation request; importing restartable Raw jobs at {1} ms/request, each followed by a Curated drain.' -f
+    '{0:o} BHA API accepted the validation request; importing with up to {1} Raw runners behind one shared {2} ms request gate, followed by one Curated drain per batch.' -f
     [datetime]::UtcNow,
+    $MaxParallelism,
     $RequestDelayMilliseconds)
 
 & $runnerPath `
     -StartMonth $StartMonth `
     -EndMonth $EndMonth `
     -StateDirectory $statePath `
+    -MaxParallelism $MaxParallelism `
     -SkipBuild
 if ($LASTEXITCODE -ne 0) {
     throw "The available-results sync failed with exit code $LASTEXITCODE."

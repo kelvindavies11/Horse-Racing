@@ -239,8 +239,11 @@ export interface ImportControlSnapshot {
   nextRetryAtUtc?: string | null;
   activePhaseId?: string | null;
   activeMonth?: string | null;
+  activeMonths: string[];
   activeStartedAtUtc?: string | null;
   activeProcessCount: number;
+  activeWorkerCount: number;
+  maximumWorkerCount: number;
   totalMonths: number;
   succeededMonths: number;
   failedMonths: number;

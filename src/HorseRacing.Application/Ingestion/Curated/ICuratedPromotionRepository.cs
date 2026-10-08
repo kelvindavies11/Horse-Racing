@@ -8,7 +8,7 @@ public interface ICuratedPromotionRepository
         IReadOnlyCollection<string> sourceJobNames,
         CancellationToken cancellationToken);
 
-    Task StartAsync(
+    Task<bool> TryStartAsync(
         CuratedPromotionStart promotionRun,
         CancellationToken cancellationToken);
 

@@ -52,6 +52,10 @@ public sealed class CuratedPromotionRunConfiguration
 
         builder.HasIndex(run => new { run.RawPayloadId, run.Outcome })
             .HasDatabaseName("ix_curated_promotion_runs_raw_payload_outcome");
+        builder.HasIndex(run => run.RawPayloadId)
+            .IsUnique()
+            .HasFilter("outcome = 'Running'")
+            .HasDatabaseName("ux_curated_promotion_runs_running_payload");
         builder.HasIndex(run => run.RawCollectionRunId)
             .HasDatabaseName("ix_curated_promotion_runs_raw_collection_run_id");
         builder.HasIndex(run => new { run.SourceJobName, run.StartedAtUtc })

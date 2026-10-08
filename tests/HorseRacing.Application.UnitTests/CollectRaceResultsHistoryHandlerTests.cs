@@ -169,17 +169,19 @@ public sealed class CollectRaceResultsHistoryHandlerTests
             CancellationToken cancellationToken) =>
             Task.FromResult(successful.GetValueOrDefault((jobName, sourceUri.AbsoluteUri)));
 
-        public Task<DateTimeOffset?> GetLatestStartAsync(
+        public Task<RawCollectionResult?> GetLatestAsync(
+            string jobName,
             Uri sourceUri,
             CancellationToken cancellationToken) =>
-            Task.FromResult<DateTimeOffset?>(null);
+            Task.FromResult<RawCollectionResult?>(null);
 
-        public Task StartAsync(
+        public Task<bool> TryStartAsync(
             RawCollectionStart collectionRun,
+            TimeSpan minimumRequestInterval,
             CancellationToken cancellationToken)
         {
             Starts.Add(collectionRun);
-            return Task.CompletedTask;
+            return Task.FromResult(true);
         }
 
         public Task FinishAsync(

@@ -92,6 +92,33 @@ public sealed class CollectRawSourceHandlerTests
         Assert.Equal("DNS unavailable", finish.Completion.ErrorMessage);
     }
 
+    [Fact]
+    public async Task Concurrent_collection_is_reused_without_a_second_source_request()
+    {
+        var existing = new RawCollectionResult(
+            Guid.NewGuid(),
+            RawCollectionOutcome.Succeeded,
+            Guid.NewGuid(),
+            200,
+            null,
+            null,
+            Encoding.UTF8.GetBytes("already collected"));
+        var repository = new RecordingRepository
+        {
+            CanStart = false,
+            Latest = existing
+        };
+        var handler = CreateHandler(
+            new StubSourceClient(new InvalidOperationException("The source must not be called.")),
+            repository);
+
+        var result = await handler.HandleAsync(CreateCommand(), CancellationToken.None);
+
+        Assert.Same(existing, result);
+        Assert.Empty(repository.Starts);
+        Assert.Empty(repository.Finishes);
+    }
+
     private static CollectRawSourceHandler CreateHandler(
         IRawSourceClient sourceClient,
         RecordingRepository repository) =>
@@ -125,6 +152,10 @@ public sealed class CollectRawSourceHandlerTests
 
     private sealed class RecordingRepository : IRawIngestionRepository
     {
+        public bool CanStart { get; init; } = true;
+
+        public RawCollectionResult? Latest { get; init; }
+
         public List<RawCollectionStart> Starts { get; } = [];
 
         public List<(RawCollectionCompletion Completion, RawPayloadCapture? Payload)> Finishes
@@ -138,17 +169,23 @@ public sealed class CollectRawSourceHandlerTests
             CancellationToken cancellationToken) =>
             Task.FromResult<RawCollectionResult?>(null);
 
-        public Task<DateTimeOffset?> GetLatestStartAsync(
+        public Task<RawCollectionResult?> GetLatestAsync(
+            string jobName,
             Uri sourceUri,
             CancellationToken cancellationToken) =>
-            Task.FromResult<DateTimeOffset?>(null);
+            Task.FromResult(Latest);
 
-        public Task StartAsync(
+        public Task<bool> TryStartAsync(
             RawCollectionStart collectionRun,
+            TimeSpan minimumRequestInterval,
             CancellationToken cancellationToken)
         {
-            Starts.Add(collectionRun);
-            return Task.CompletedTask;
+            if (CanStart)
+            {
+                Starts.Add(collectionRun);
+            }
+
+            return Task.FromResult(CanStart);
         }
 
         public Task FinishAsync(
