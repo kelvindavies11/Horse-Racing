@@ -1,12 +1,12 @@
 [CmdletBinding()]
 param(
     [ValidatePattern('^\d{4}-\d{2}$')]
-    [string] $StartMonth = '2026-10',
+    [string] $StartMonth = '2026-01',
 
     [ValidatePattern('^\d{4}-\d{2}$')]
     [string] $EndMonth = '2026-12',
 
-    [string] $StateDirectory = 'artifacts/2026-q4-sync',
+    [string] $StateDirectory = 'artifacts/2026-results-sync',
 
     [ValidatePattern('^\d{4}-\d{2}-\d{2}$')]
     [string] $ThroughDate,
@@ -110,7 +110,7 @@ if (-not $DryRun) {
     if ([string]::IsNullOrWhiteSpace($token)) {
         throw (
             'Set BhaCollection__RacingStatusApiBearerToken in the current process ' +
-            'or user environment before starting the year-end sync.')
+            'or user environment before starting the available-results sync.')
     }
     $env:BhaCollection__RacingStatusApiBearerToken = $token
 

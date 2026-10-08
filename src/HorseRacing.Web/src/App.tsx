@@ -696,7 +696,7 @@ const ImportControlPage = ({
       </section>
 
       <section className="metric-strip import-metrics">
-        <Metric value={number.format(data.totalMonths)} label="Monthly runners" note="Across three fixed phases" index="01" />
+        <Metric value={number.format(data.totalMonths)} label="Monthly runners" note="Across the active import plan" index="01" />
         <Metric value={number.format(data.succeededMonths)} label="Succeeded" note={`${Math.round((data.succeededMonths / data.totalMonths) * 100)}% of the archive`} index="02" />
         <Metric value={number.format(data.failedMonths)} label="Need retry" note="Safe to resume by phase" index="03" />
         <Metric value={number.format(data.queuedMonths)} label="Still queued" note="Future and untouched months" index="04" />
@@ -721,7 +721,7 @@ const ImportControlPage = ({
 
       <section className="section-block import-queue-section">
         <div className="section-heading import-queue-heading">
-          <div><p className="kicker">144 monthly runners</p><h2>Dispatch queue</h2></div>
+          <div><p className="kicker">{number.format(data.totalMonths)} monthly runners</p><h2>Dispatch queue</h2></div>
           <div className="queue-filters">
             <label><span>Phase</span><select value={phaseFilter} onChange={(event) => setPhaseFilter(event.target.value)}><option value="all">All phases</option>{data.phases.map((phase) => <option key={phase.id} value={phase.id}>{phase.name}</option>)}</select></label>
             <label><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">All states</option><option value="Running">Running</option><option value="Succeeded">Succeeded</option><option value="Failed">Need retry</option><option value="Queued">Queued</option></select></label>

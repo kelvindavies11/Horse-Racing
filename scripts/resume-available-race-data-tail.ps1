@@ -1,12 +1,12 @@
 [CmdletBinding()]
 param(
     [ValidatePattern('^\d{4}-\d{2}$')]
-    [string] $StartMonth = '2026-10',
+    [string] $StartMonth = '2026-01',
 
     [ValidatePattern('^\d{4}-\d{2}$')]
     [string] $EndMonth = '2026-12',
 
-    [string] $StateDirectory = 'artifacts/2026-q4-sync',
+    [string] $StateDirectory = 'artifacts/2026-results-sync',
 
     [ValidateRange(1, 120)]
     [int] $ProbeIntervalMinutes = 15,
@@ -164,7 +164,7 @@ Write-Output (
     -StateDirectory $statePath `
     -SkipBuild
 if ($LASTEXITCODE -ne 0) {
-    throw "The year-end result sync failed with exit code $LASTEXITCODE."
+    throw "The available-results sync failed with exit code $LASTEXITCODE."
 }
 
 & $backfillPath
@@ -172,4 +172,4 @@ if ($LASTEXITCODE -ne 0) {
     throw "Participant backfill failed with exit code $LASTEXITCODE."
 }
 
-Write-Output ('{0:o} Available year-end results and participant links are current.' -f [datetime]::UtcNow)
+Write-Output ('{0:o} Available results and participant links are current.' -f [datetime]::UtcNow)

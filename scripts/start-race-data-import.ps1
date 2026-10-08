@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
-    [ValidateSet('five-year', 'year-end', 'historical')]
+    [ValidateSet('year-2026')]
     [string] $PhaseId
 )
 
@@ -12,23 +12,11 @@ $repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $pwshPath = (Get-Command pwsh -ErrorAction Stop).Source
 
 $phases = @{
-    'five-year' = @{
-        Script = 'resume-monthly-race-data-history.ps1'
-        StartMonth = '2021-10'
-        EndMonth = '2026-09'
-        StateDirectory = 'artifacts/five-year-sync'
-    }
-    'year-end' = @{
+    'year-2026' = @{
         Script = 'resume-available-race-data-tail.ps1'
-        StartMonth = '2026-10'
+        StartMonth = '2026-01'
         EndMonth = '2026-12'
-        StateDirectory = 'artifacts/2026-q4-sync'
-    }
-    'historical' = @{
-        Script = 'resume-monthly-race-data-history.ps1'
-        StartMonth = '2015-01'
-        EndMonth = '2021-09'
-        StateDirectory = 'artifacts/2015-2021-sync'
+        StateDirectory = 'artifacts/2026-results-sync'
     }
 }
 

@@ -82,26 +82,12 @@ public sealed class ImportControlService
     private static readonly ImportPhaseDefinition[] Definitions =
     [
         new(
-            "five-year",
-            "Five-year results",
-            "The recent history pass currently feeding the local site.",
-            new DateOnly(2021, 10, 1),
-            new DateOnly(2026, 9, 1),
-            "artifacts/five-year-sync"),
-        new(
-            "year-end",
-            "2026 live tail",
-            "A rolling pass from October through December, refreshed as results become available.",
-            new DateOnly(2026, 10, 1),
+            "year-2026",
+            "2026 results",
+            "A clean Raw-to-Curated pass for 2026, refreshed as new results become available.",
+            new DateOnly(2026, 1, 1),
             new DateOnly(2026, 12, 1),
-            "artifacts/2026-q4-sync"),
-        new(
-            "historical",
-            "Historical archive",
-            "The earlier monthly archive from 2015 through September 2021.",
-            new DateOnly(2015, 1, 1),
-            new DateOnly(2021, 9, 1),
-            "artifacts/2015-2021-sync"),
+            "artifacts/2026-results-sync"),
     ];
 
     private readonly ILogger<ImportControlService> logger;
@@ -129,8 +115,6 @@ public sealed class ImportControlService
             : observedProcesses.Min(process => process.StartedAtUtc);
         var isRunning = observedProcesses.Count > 0;
         var isExecuting = activeProcess is not null;
-        var today = GetLondonToday();
-
         var phaseRows = Definitions.ToDictionary(
             definition => definition.Id,
             definition => ReadProgress(definition),
@@ -144,11 +128,6 @@ public sealed class ImportControlService
                 activeStartedAtUtc,
                 isExecuting))
             .ToArray();
-
-        var fiveYearJobs = jobs.Where(job => job.PhaseId == "five-year").ToArray();
-        var yearEndRows = phaseRows["year-end"];
-        var fiveYearComplete = fiveYearJobs.Count(job => job.Status == "Succeeded") == fiveYearJobs.Length;
-        var yearEndCurrent = IsYearEndCurrent(yearEndRows, today);
 
         var phases = Definitions.Select(definition =>
         {
@@ -168,26 +147,6 @@ public sealed class ImportControlService
             {
                 canStart = false;
                 blocker = "Another import owns the single-runner slot.";
-            }
-            else if (definition.Id == "year-end" && !fiveYearComplete)
-            {
-                canStart = false;
-                blocker = "The five-year phase must finish first.";
-            }
-            else if (definition.Id == "year-end" && yearEndCurrent)
-            {
-                canStart = false;
-                blocker = $"Coverage is already current through {today:dd MMM yyyy}.";
-            }
-            else if (definition.Id == "historical" && !fiveYearComplete)
-            {
-                canStart = false;
-                blocker = "The five-year phase must finish first.";
-            }
-            else if (definition.Id == "historical" && !yearEndCurrent)
-            {
-                canStart = false;
-                blocker = "Bring the 2026 live tail up to date first.";
             }
 
             var status = activePhaseId == definition.Id
@@ -401,24 +360,6 @@ public sealed class ImportControlService
         }
     }
 
-    private static bool IsYearEndCurrent(
-        IReadOnlyList<ImportProgressRow> rows,
-        DateOnly today)
-    {
-        var start = new DateOnly(2026, 10, 1);
-        if (today < start)
-        {
-            return true;
-        }
-
-        var requiredThrough = today < new DateOnly(2026, 12, 31)
-            ? today
-            : new DateOnly(2026, 12, 31);
-        return rows
-            .Where(row => string.Equals(row.Status, "Succeeded", StringComparison.OrdinalIgnoreCase))
-            .Any(row => row.To >= requiredThrough);
-    }
-
     private static string? FindActivePhaseId(
         IReadOnlyList<ObservedImportProcess> processes,
         ObservedImportProcess? raceDataProcess)
@@ -438,32 +379,8 @@ public sealed class ImportControlService
 
         var commandLine = processes
             .Select(process => process.CommandLine)
-            .FirstOrDefault(command => command.Contains("resume-after-throttle.ps1", StringComparison.OrdinalIgnoreCase));
-        if (commandLine is not null)
-        {
-            return "five-year";
-        }
-
-        commandLine = processes
-            .Select(process => process.CommandLine)
             .FirstOrDefault(command => command.Contains("resume-available-race-data-tail.ps1", StringComparison.OrdinalIgnoreCase));
-        if (commandLine is not null)
-        {
-            return "year-end";
-        }
-
-        commandLine = processes
-            .Select(process => process.CommandLine)
-            .FirstOrDefault(command => command.Contains("resume-monthly-race-data-history.ps1", StringComparison.OrdinalIgnoreCase));
-        if (commandLine is null)
-        {
-            return null;
-        }
-
-        return commandLine.Contains("2015-01", StringComparison.OrdinalIgnoreCase)
-            || commandLine.Contains("2015-2021-sync", StringComparison.OrdinalIgnoreCase)
-            ? "historical"
-            : "five-year";
+        return commandLine is null ? null : "year-2026";
     }
 
     private static string? GetActiveMonth(ObservedImportProcess? process)
@@ -577,21 +494,6 @@ public sealed class ImportControlService
                 }
             })
             .ToArray();
-    }
-
-    private static DateOnly GetLondonToday()
-    {
-        TimeZoneInfo london;
-        try
-        {
-            london = TimeZoneInfo.FindSystemTimeZoneById("Europe/London");
-        }
-        catch (TimeZoneNotFoundException)
-        {
-            london = TimeZoneInfo.FindSystemTimeZoneById("GMT Standard Time");
-        }
-
-        return DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, london).DateTime);
     }
 
     private static string FindRepositoryRoot(string contentRootPath)

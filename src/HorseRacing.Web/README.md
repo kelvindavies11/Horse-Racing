@@ -32,7 +32,7 @@ This public URL is not a secret. Database credentials remain server-side.
 - **Explore** shows Curated record counts, type distribution, name/source-key search, type filtering, bounded pagination and a record drawer containing the found data, source location, observation timestamps and Raw/Curated lineage identifiers.
 - **Patterns** infers links where reference-like Curated fields such as `horseId`, `fixtureId`, `courseName` or `trainerId` match another record's source key or display name. It shows type-pair frequency and lets the user inspect connected entity hubs. These are inspection signals, not persisted or asserted domain relationships.
 - **Admin audit** shows aggregate and per-run information for Raw collection and Curated promotion jobs, including outcomes, timing, versions, HTTP/payload metadata, record counts and recorded errors. It is read-only.
-- **Import control** displays all 144 fixed monthly runners across the five-year, live-tail and historical phases. It refreshes every five seconds, shows the active runner and paginated/filterable queue, and offers a two-step start/resume control only when the prerequisites and exclusive-runner guard allow it. There is deliberately no stop or arbitrary-command control.
+- **Import control** displays the 12 monthly runners in the clean 2026 Raw-to-Curated plan. It refreshes every five seconds, shows the active runner and paginated/filterable queue, and offers a two-step start/resume control when the exclusive-runner guard allows it. There is deliberately no stop or arbitrary-command control.
 
 ## Read API
 

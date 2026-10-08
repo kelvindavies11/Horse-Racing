@@ -29,36 +29,26 @@ The inclusive range is limited to 32 days. With no arguments, the job imports th
 
 The result flow is safe to rerun: Raw attempts remain immutable, promotion upserts by source identity while retaining observation history, and the location/weather rows are upserted by course identity and Curated race respectively.
 
-## Long historical batches
+## Restartable Raw-to-Curated batches
 
-Use the restartable monthly runner for longer periods. The fast historical path deliberately separates each month into two visible process boundaries:
+Use the restartable monthly runner for longer periods. The fast path deliberately separates each month into two visible process boundaries:
 
 1. `HorseRacing.RaceDataSync --mode raw --reuse-successful` captures only Raw payloads that have not already succeeded. If the BHA API throttles or the network fails, the raw pass stops promptly instead of continuing to issue doomed requests.
 2. `HorseRacing.Bha.CuratedPromoter --drain` runs immediately afterward and drains every pending Raw payload in batches until none remain.
 
 The runner records one immutable status row per monthly attempt and skips months that have already succeeded. Weather is deferred from this fast Raw-to-Curated import path; run `RaceDataSync --mode weather` separately after the result archive is current.
 
-```powershell
-./scripts/resume-monthly-race-data-history.ps1 `
-  -StartMonth 2015-01 `
-  -EndMonth 2021-09 `
-  -StateDirectory artifacts/2015-2021-sync `
-  -RequestDelayMilliseconds 1000
-```
-
-The resume process refreshes and validates the public BHA results-client token using the official-site workflow, waits through `418`/`429` throttling, and refuses to run alongside another historical Raw, Curated or resume process. Successful source payloads are reused by exact job name and source URL, so retrying a partially completed month requests only its missing work. January 2015 through September 2021 is 81 monthly batches; October 2021 through September 2026 belongs to the existing 60-month batch, so the two ranges do not overlap. On completion the runner performs the idempotent participant backfill used by Explore.
-
-October through December 2026 is a rolling tail because future results do not exist yet. Run the available portion with:
+The reviewed Admin import plan is a clean 2026 pass. Because future results do not exist yet, it uses the date-aware available-results runner:
 
 ```powershell
 ./scripts/resume-available-race-data-tail.ps1 `
-  -StartMonth 2026-10 `
+  -StartMonth 2026-01 `
   -EndMonth 2026-12 `
-  -StateDirectory artifacts/2026-q4-sync `
+  -StateDirectory artifacts/2026-results-sync `
   -RequestDelayMilliseconds 1000
 ```
 
-The tail runner bounds the current month at today's Europe/London date, reruns that month when a later day becomes available, and only records a final month when its calendar end has been reached. It shares the same exclusive import slot and token rules, so it must be serialized with the 60-month and 81-month historical phases. Together the three non-overlapping phases cover 1 January 2015 through 31 December 2026.
+The resume process refreshes and validates the public BHA results-client token using the official-site workflow, waits through `418`/`429` throttling, and refuses to run alongside another Raw, Curated or resume process. The runner bounds the current month at today's Europe/London date, reruns that month when a later day becomes available, and only records a final month when its calendar end has been reached. Successful source payloads are reused by exact job name and source URL when retrying the same range. On completion it performs the idempotent participant backfill used by Explore.
 
 ## API and website
 
