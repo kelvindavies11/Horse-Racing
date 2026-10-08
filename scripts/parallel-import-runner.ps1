@@ -18,6 +18,9 @@ function Invoke-ParallelRawBatch {
         [string] $RawProjectPath,
 
         [Parameter(Mandatory)]
+        [string] $CuratedProjectPath,
+
+        [Parameter(Mandatory)]
         [string] $StatePath
     )
 
@@ -69,6 +72,7 @@ function Invoke-ParallelRawBatch {
     $results = [System.Collections.Generic.List[object]]::new()
     foreach ($worker in $workers) {
         $worker.Process.WaitForExit()
+        $rawExitCode = $worker.Process.ExitCode
         if (Test-Path -LiteralPath $worker.StandardOutputPath) {
             Get-Content -LiteralPath $worker.StandardOutputPath | ForEach-Object {
                 Write-Host ('  [{0}] {1}' -f $worker.Month.From.Substring(0, 7), $_)
@@ -80,9 +84,17 @@ function Invoke-ParallelRawBatch {
             }
         }
 
+        Write-Host (
+            '  [{0}] Raw runner exited {1}; starting its serialized Curated drain.' -f
+            $worker.Month.From.Substring(0, 7),
+            $rawExitCode)
+        & dotnet run --no-build --project $CuratedProjectPath -- --drain
+        $curatedExitCode = $LASTEXITCODE
+
         $results.Add([pscustomobject]@{
             Month = $worker.Month
-            ExitCode = $worker.Process.ExitCode
+            RawExitCode = $rawExitCode
+            CuratedExitCode = $curatedExitCode
         })
         $worker.Process.Dispose()
     }

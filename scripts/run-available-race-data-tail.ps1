@@ -191,15 +191,12 @@ for ($batchStart = 0; $batchStart -lt $pendingMonths.Count; $batchStart += $MaxP
     $rawResults = @(Invoke-ParallelRawBatch `
         -Months $batch `
         -RawProjectPath $rawProjectPath `
+        -CuratedProjectPath $curatedProjectPath `
         -StatePath $statePath)
-
-    Write-Output '  Curated job: one serialized drain for the completed Raw batch.'
-    & dotnet run --no-build --project $curatedProjectPath -- --drain
-    $curatedExitCode = $LASTEXITCODE
 
     foreach ($rawResult in $rawResults) {
         $month = $rawResult.Month
-        $exitCode = if ($rawResult.ExitCode -eq 0 -and $curatedExitCode -eq 0) { 0 } else { 1 }
+        $exitCode = if ($rawResult.RawExitCode -eq 0 -and $rawResult.CuratedExitCode -eq 0) { 0 } else { 1 }
         $status = if ($exitCode -eq 0) { 'Succeeded' } else { 'Failed' }
         [pscustomobject]@{
             MonthIndex = $month.Index
@@ -218,8 +215,8 @@ for ($batchStart = 0; $batchStart -lt $pendingMonths.Count; $batchStart += $MaxP
                 'The available range {0} through {1} needs retrying (Raw exit {2}, Curated exit {3}).' -f
                 $month.From,
                 $month.To,
-                $rawResult.ExitCode,
-                $curatedExitCode)
+                $rawResult.RawExitCode,
+                $rawResult.CuratedExitCode)
         }
     }
 

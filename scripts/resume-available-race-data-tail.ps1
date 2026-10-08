@@ -172,7 +172,7 @@ while (-not (Test-BhaApiReady -Token $bhaToken)) {
 }
 
 Write-Output (
-    '{0:o} BHA API accepted the validation request; importing with up to {1} Raw runners behind one shared {2} ms request gate, followed by one Curated drain per batch.' -f
+    '{0:o} BHA API accepted the validation request; importing with up to {1} Raw runners behind one shared {2} ms request gate, with one serialized Curated drain after each Raw runner.' -f
     [datetime]::UtcNow,
     $MaxParallelism,
     $RequestDelayMilliseconds)
