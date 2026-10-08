@@ -327,7 +327,7 @@ public sealed class ImportControlService
 
         try
         {
-            foreach (var line in File.ReadLines(logPath).Reverse().Take(50))
+            foreach (var line in ReadSharedLines(logPath).Reverse().Take(50))
             {
                 var throttle = ThrottleLogPattern.Match(line);
                 if (throttle.Success
@@ -361,6 +361,23 @@ public sealed class ImportControlService
         }
 
         return null;
+    }
+
+    private static IReadOnlyList<string> ReadSharedLines(string path)
+    {
+        using var stream = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete);
+        using var reader = new StreamReader(stream);
+        var lines = new List<string>();
+        while (reader.ReadLine() is { } line)
+        {
+            lines.Add(line);
+        }
+
+        return lines;
     }
 
     private static bool TryReadLogTimestamp(Match match, out DateTimeOffset timestamp) =>
