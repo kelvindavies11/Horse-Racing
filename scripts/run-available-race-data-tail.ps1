@@ -20,7 +20,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$projectPath = Join-Path $repositoryRoot 'src\HorseRacing.RaceDataSync'
+$rawProjectPath = Join-Path $repositoryRoot 'src\HorseRacing.RaceDataSync'
+$curatedProjectPath = Join-Path $repositoryRoot 'src\HorseRacing.Bha.CuratedPromoter'
 $solutionPath = Join-Path $repositoryRoot 'HorseRacing.sln'
 $statePath = if ([System.IO.Path]::IsPathRooted($StateDirectory)) {
     [System.IO.Path]::GetFullPath($StateDirectory)
@@ -75,8 +76,15 @@ Write-Output (
 
 New-Item -ItemType Directory -Path $statePath -Force | Out-Null
 $successfulCoverage = @{}
+$attemptedRanges = [System.Collections.Generic.HashSet[string]]::new(
+    [System.StringComparer]::Ordinal)
 if (Test-Path -LiteralPath $progressPath) {
-    foreach ($entry in Import-Csv -LiteralPath $progressPath | Where-Object Status -eq 'Succeeded') {
+    foreach ($entry in Import-Csv -LiteralPath $progressPath) {
+        [void] $attemptedRanges.Add("$($entry.From)|$($entry.To)")
+        if ($entry.Status -ne 'Succeeded') {
+            continue
+        }
+
         $entryTo = [datetime]::ParseExact($entry.To, 'yyyy-MM-dd', $culture)
         $coveredTo = if ($successfulCoverage.ContainsKey($entry.From)) {
             [datetime]::ParseExact($successfulCoverage[$entry.From], 'yyyy-MM-dd', $culture)
@@ -120,6 +128,7 @@ if (-not $DryRun) {
             'Username=horse_racing;Password=horse_racing_local'
     }
     $env:ConnectionStrings__HorseRacing = $connectionString
+    $env:BhaCuratedPromotion__BatchSize = '1000'
 
     if (-not $SkipBuild) {
         & dotnet build $solutionPath --no-restore
@@ -144,7 +153,7 @@ foreach ($month in $months) {
     }
 
     Write-Output (
-        '[{0}/{1}] {2} through {3}: Raw collection, Curated promotion, weather enrichment{4}' -f
+        '[{0}/{1}] {2} through {3}: restartable Raw collection, then Curated drain{4}' -f
         $month.Index,
         $months.Count,
         $month.From,
@@ -155,11 +164,38 @@ foreach ($month in $months) {
         continue
     }
 
-    & dotnet run --no-build --project $projectPath -- `
-        --from $month.From `
-        --to $month.To
+    $isSameRangeRetry = $attemptedRanges.Contains("$($month.From)|$($month.To)")
+    Write-Output $(if ($isSameRangeRetry) {
+        '  Raw job: retrying only missing payloads for the same available range.'
+    }
+    else {
+        '  Raw job: refreshing the newly available range.'
+    })
+    $rawArguments = @(
+        'run',
+        '--no-build',
+        '--project',
+        $rawProjectPath,
+        '--',
+        '--mode',
+        'raw',
+        '--from',
+        $month.From,
+        '--to',
+        $month.To
+    )
+    if ($isSameRangeRetry) {
+        $rawArguments += '--reuse-successful'
+    }
+    & dotnet @rawArguments
 
-    $exitCode = $LASTEXITCODE
+    $rawExitCode = $LASTEXITCODE
+
+    Write-Output '  Curated job: draining every pending Raw payload.'
+    & dotnet run --no-build --project $curatedProjectPath -- --drain
+    $curatedExitCode = $LASTEXITCODE
+
+    $exitCode = if ($rawExitCode -eq 0 -and $curatedExitCode -eq 0) { 0 } else { 1 }
     $status = if ($exitCode -eq 0) { 'Succeeded' } else { 'Failed' }
     [pscustomobject]@{
         MonthIndex = $month.Index
@@ -174,7 +210,12 @@ foreach ($month in $months) {
 
     if ($exitCode -ne 0) {
         $failedRanges.Add("$($month.From):$($month.To)")
-        Write-Warning "The available range $($month.From) through $($month.To) needs retrying."
+        Write-Warning (
+            'The available range {0} through {1} needs retrying (Raw exit {2}, Curated exit {3}).' -f
+            $month.From,
+            $month.To,
+            $rawExitCode,
+            $curatedExitCode)
     }
 }
 

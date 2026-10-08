@@ -73,63 +73,78 @@ public sealed class CuratedPromotionRepository(HorseRacingDbContext dbContext)
         CancellationToken cancellationToken)
     {
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-
-        var run = await dbContext.CuratedPromotionRuns.SingleAsync(
-            item => item.Id == completion.PromotionRunId,
-            cancellationToken);
-
-        var upsertedRecords = 0;
-        var uniqueDomainObjects = domainObjects
-            .GroupBy(item => new
-            {
-                item.SourceSystem,
-                item.DomainObjectType,
-                item.SourceKey
-            })
-            .Select(group => group.Last())
-            .ToList();
-
-        foreach (var domainObject in uniqueDomainObjects)
+        try
         {
-            var existing = await dbContext.CuratedDomainObjects.SingleOrDefaultAsync(
-                item =>
-                    item.SourceSystem == domainObject.SourceSystem
-                    && item.DomainObjectType == domainObject.DomainObjectType
-                    && item.SourceKey == domainObject.SourceKey,
+            var run = await dbContext.CuratedPromotionRuns.SingleAsync(
+                item => item.Id == completion.PromotionRunId,
                 cancellationToken);
 
-            if (existing is null)
+            var upsertedRecords = 0;
+            var uniqueDomainObjects = domainObjects
+                .GroupBy(item => new
+                {
+                    item.SourceSystem,
+                    item.DomainObjectType,
+                    item.SourceKey
+                })
+                .Select(group => group.Last())
+                .ToList();
+
+            foreach (var domainObject in uniqueDomainObjects)
             {
-                dbContext.CuratedDomainObjects.Add(
-                    CuratedDomainObject.Create(
+                var existing = await dbContext.CuratedDomainObjects.SingleOrDefaultAsync(
+                    item =>
+                        item.SourceSystem == domainObject.SourceSystem
+                        && item.DomainObjectType == domainObject.DomainObjectType
+                        && item.SourceKey == domainObject.SourceKey,
+                    cancellationToken);
+
+                if (existing is null)
+                {
+                    dbContext.CuratedDomainObjects.Add(
+                        CuratedDomainObject.Create(
+                            domainObject,
+                            run.RawPayloadId,
+                            run.RawCollectionRunId,
+                            run.Id));
+                }
+                else
+                {
+                    existing.ApplyObservation(
                         domainObject,
                         run.RawPayloadId,
                         run.RawCollectionRunId,
-                        run.Id));
+                        run.Id);
+                }
+
+                upsertedRecords++;
             }
-            else
+
+            run.Finish(completion with
             {
-                existing.ApplyObservation(
-                    domainObject,
-                    run.RawPayloadId,
-                    run.RawCollectionRunId,
-                    run.Id);
+                RecordsUpserted = upsertedRecords,
+                ErrorCode = Truncate(completion.ErrorCode, 100),
+                ErrorMessage = Truncate(completion.ErrorMessage, 2000)
+            });
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            return upsertedRecords;
+        }
+        catch
+        {
+            try
+            {
+                await transaction.RollbackAsync(CancellationToken.None);
+            }
+            finally
+            {
+                dbContext.ChangeTracker.Clear();
             }
 
-            upsertedRecords++;
+            throw;
         }
-
-        run.Finish(completion with
-        {
-            RecordsUpserted = upsertedRecords,
-            ErrorCode = Truncate(completion.ErrorCode, 100),
-            ErrorMessage = Truncate(completion.ErrorMessage, 2000)
-        });
-
-        await dbContext.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-
-        return upsertedRecords;
     }
 
     private static string? Truncate(string? value, int maximumLength) =>

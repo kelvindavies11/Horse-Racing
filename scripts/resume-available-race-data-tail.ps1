@@ -12,7 +12,7 @@ param(
     [int] $ProbeIntervalMinutes = 15,
 
     [ValidateRange(1000, 10000)]
-    [int] $RequestDelayMilliseconds = 5000
+    [int] $RequestDelayMilliseconds = 1000
 )
 
 Set-StrictMode -Version Latest
@@ -108,6 +108,7 @@ function Wait-ForExclusiveImportSlot {
             $_.ProcessId -ne $PID -and
             -not [string]::IsNullOrWhiteSpace($_.CommandLine) -and
             ($_.CommandLine -match 'HorseRacing\.RaceDataSync' -or
+                $_.CommandLine -match 'HorseRacing\.Bha\.CuratedPromoter' -or
                 $_.CommandLine -match 'resume-after-throttle\.ps1' -or
                 $_.CommandLine -match 'resume-monthly-race-data-history\.ps1' -or
                 $_.CommandLine -match 'resume-available-race-data-tail\.ps1')
@@ -141,7 +142,7 @@ while (-not (Test-BhaApiReady -Token $bhaToken)) {
 }
 
 Write-Output (
-    '{0:o} BHA API accepted the validation request; importing available year-end data at {1} ms/request.' -f
+    '{0:o} BHA API accepted the validation request; importing restartable Raw jobs at {1} ms/request, each followed by a Curated drain.' -f
     [datetime]::UtcNow,
     $RequestDelayMilliseconds)
 

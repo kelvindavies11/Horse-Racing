@@ -36,6 +36,7 @@ $activeImports = @(Get-CimInstance Win32_Process | Where-Object {
     $_.ProcessId -ne $PID -and
     -not [string]::IsNullOrWhiteSpace($_.CommandLine) -and
     ($_.CommandLine -match 'HorseRacing\.RaceDataSync' -or
+        $_.CommandLine -match 'HorseRacing\.Bha\.CuratedPromoter' -or
         $_.CommandLine -match 'resume-after-throttle\.ps1' -or
         $_.CommandLine -match 'resume-monthly-race-data-history\.ps1' -or
         $_.CommandLine -match 'resume-available-race-data-tail\.ps1')
@@ -73,7 +74,7 @@ $arguments = @(
     '-ProbeIntervalMinutes',
     '15',
     '-RequestDelayMilliseconds',
-    '5000'
+    '1000'
 )
 
 $process = Start-Process `

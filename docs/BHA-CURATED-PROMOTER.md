@@ -65,6 +65,17 @@ Run the promoter from the repository root:
 dotnet run --project src/HorseRacing.Bha.CuratedPromoter
 ```
 
+One invocation normally processes a single configured batch. Use `--drain` after a
+historical Raw job to keep selecting batches until no pending Raw payloads remain:
+
+```powershell
+dotnet run --project src/HorseRacing.Bha.CuratedPromoter -- --drain
+```
+
+Drain mode includes previously failed payloads, then stops with a non-zero exit code on
+the first failed promotion. This retries repaired parser cases without creating an
+unbounded loop around a payload that still cannot be promoted.
+
 Configuration comes from `appsettings.json`, environment variables, or command-line
 configuration. PowerShell environment-variable examples:
 

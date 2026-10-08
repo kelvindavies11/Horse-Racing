@@ -45,6 +45,15 @@ if (toDate < fromDate || toDate.DayNumber - fromDate.DayNumber > 31)
     return 2;
 }
 
+var mode = (ReadArgument(args, "--mode") ?? "all").ToLowerInvariant();
+if (mode is not ("all" or "raw" or "weather"))
+{
+    logger.LogError("--mode must be all, raw, or weather.");
+    return 2;
+}
+
+var reuseSuccessfulPayloads = HasSwitch(args, "--reuse-successful");
+
 using var shutdown = new CancellationTokenSource();
 Console.CancelKeyPress += (_, eventArgs) =>
 {
@@ -53,55 +62,97 @@ Console.CancelKeyPress += (_, eventArgs) =>
 };
 
 logger.LogInformation(
-    "Synchronising BHA race results and race-time weather from {FromDate} to {ToDate}.",
+    "Synchronising BHA race data from {FromDate} to {ToDate} in {Mode} mode.",
     fromDate,
-    toDate);
+    toDate,
+    mode);
 
 try
 {
-    var collection = await services.GetRequiredService<CollectRaceResultsHistoryHandler>().HandleAsync(
-        new CollectRaceResultsHistoryCommand(
-            fromDate,
-            toDate,
-            options.CollectorVersion,
-            TimeSpan.FromMilliseconds(options.DelayBetweenRequestsMilliseconds)),
-        shutdown.Token);
-    logger.LogInformation(
-        "Raw collection found {Fixtures} fixtures and {Races} races, stored {Results} result payloads, with {Failures} failed requests.",
-        collection.FixturesFound,
-        collection.RacesFound,
-        collection.ResultPayloadsCollected,
-        collection.FailedCollections);
+    var failures = 0;
+    CollectRaceResultsHistoryResult? collection = null;
 
-    var promotion = await services.GetRequiredService<PromoteRawPayloadsHandler>().HandleAsync(
-        new PromoteRawPayloadsCommand(
-            options.PromotionJobName,
-            options.PromoterVersion,
-            1000,
-            true,
-            collection.SuccessfulJobNames),
-        shutdown.Token);
-    logger.LogInformation(
-        "Curated promotion selected {Selected} payloads and upserted {Upserted} records ({Failed} failures).",
-        promotion.PayloadsSelected,
-        promotion.RecordsUpserted,
-        promotion.PayloadsFailed);
+    if (mode is "all" or "raw")
+    {
+        collection = await services.GetRequiredService<CollectRaceResultsHistoryHandler>().HandleAsync(
+            new CollectRaceResultsHistoryCommand(
+                fromDate,
+                toDate,
+                options.CollectorVersion,
+                TimeSpan.FromMilliseconds(options.DelayBetweenRequestsMilliseconds),
+                reuseSuccessfulPayloads),
+            shutdown.Token);
+        logger.LogInformation(
+            "Raw collection found {Fixtures} fixtures and {Races} races, captured {Results} new result payloads, " +
+            "reused {Reused} existing payloads, observed {Unavailable} unavailable results, and had {Failures} failed requests.",
+            collection.FixturesFound,
+            collection.RacesFound,
+            collection.ResultPayloadsCollected,
+            collection.PayloadsReused,
+            collection.UnavailableResultPayloads,
+            collection.FailedCollections);
+        failures += collection.FailedCollections;
+    }
 
-    var weather = await services.GetRequiredService<EnrichRaceWeatherHandler>().HandleAsync(
-        new EnrichRaceWeatherCommand(
-            fromDate,
-            toDate,
-            options.CollectorVersion,
-            TimeSpan.FromMilliseconds(options.DelayBetweenRequestsMilliseconds)),
-        shutdown.Token);
-    logger.LogInformation(
-        "Weather enrichment processed {Targets} races, stored {Locations} locations and {WeatherRows} weather rows ({Failures} failures).",
-        weather.RaceTargets,
-        weather.LocationsStored,
-        weather.WeatherRowsStored,
-        weather.FailedCollections);
+    if (mode == "raw")
+    {
+        return failures > 0 ? 1 : 0;
+    }
 
-    return collection.FailedCollections + promotion.PayloadsFailed + weather.FailedCollections > 0 ? 1 : 0;
+    if (mode == "all" && collection is not null)
+    {
+        var promoter = services.GetRequiredService<PromoteRawPayloadsHandler>();
+        var selected = 0;
+        var upserted = 0;
+        var promotionFailures = 0;
+        do
+        {
+            var promotion = await promoter.HandleAsync(
+                new PromoteRawPayloadsCommand(
+                    options.PromotionJobName,
+                    options.PromoterVersion,
+                    1000,
+                    true,
+                    collection.SuccessfulJobNames),
+                shutdown.Token);
+            selected += promotion.PayloadsSelected;
+            upserted += promotion.RecordsUpserted;
+            promotionFailures += promotion.PayloadsFailed;
+
+            if (promotion.PayloadsSelected == 0 || promotion.PayloadsFailed > 0)
+            {
+                break;
+            }
+        }
+        while (true);
+
+        logger.LogInformation(
+            "Curated promotion drained {Selected} payloads and upserted {Upserted} records ({Failed} failures).",
+            selected,
+            upserted,
+            promotionFailures);
+        failures += promotionFailures;
+    }
+
+    if (mode is "all" or "weather")
+    {
+        var weather = await services.GetRequiredService<EnrichRaceWeatherHandler>().HandleAsync(
+            new EnrichRaceWeatherCommand(
+                fromDate,
+                toDate,
+                options.CollectorVersion,
+                TimeSpan.FromMilliseconds(options.DelayBetweenRequestsMilliseconds)),
+            shutdown.Token);
+        logger.LogInformation(
+            "Weather enrichment processed {Targets} races, stored {Locations} locations and {WeatherRows} weather rows ({Failures} failures).",
+            weather.RaceTargets,
+            weather.LocationsStored,
+            weather.WeatherRowsStored,
+            weather.FailedCollections);
+        failures += weather.FailedCollections;
+    }
+
+    return failures > 0 ? 1 : 0;
 }
 catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
 {
@@ -111,34 +162,43 @@ catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
 
 static DateOnly? ReadDateArgument(string[] arguments, string name)
 {
+    var value = ReadArgument(arguments, name);
+    if (value is null)
+    {
+        return null;
+    }
+
+    return DateOnly.TryParseExact(
+        value,
+        "yyyy-MM-dd",
+        CultureInfo.InvariantCulture,
+        DateTimeStyles.None,
+        out var date)
+        ? date
+        : throw new ArgumentException($"{name} must use yyyy-MM-dd.");
+}
+
+static string? ReadArgument(string[] arguments, string name)
+{
     for (var index = 0; index < arguments.Length; index++)
     {
-        string? value = null;
         if (arguments[index].StartsWith($"{name}=", StringComparison.OrdinalIgnoreCase))
         {
-            value = arguments[index][(name.Length + 1)..];
-        }
-        else if (arguments[index].Equals(name, StringComparison.OrdinalIgnoreCase)
-                 && index + 1 < arguments.Length)
-        {
-            value = arguments[index + 1];
+            return arguments[index][(name.Length + 1)..];
         }
 
-        if (value is not null)
+        if (arguments[index].Equals(name, StringComparison.OrdinalIgnoreCase)
+            && index + 1 < arguments.Length)
         {
-            return DateOnly.TryParseExact(
-                value,
-                "yyyy-MM-dd",
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.None,
-                out var date)
-                ? date
-                : throw new ArgumentException($"{name} must use yyyy-MM-dd.");
+            return arguments[index + 1];
         }
     }
 
     return null;
 }
+
+static bool HasSwitch(string[] arguments, string name) =>
+    arguments.Any(argument => argument.Equals(name, StringComparison.OrdinalIgnoreCase));
 
 internal sealed class RaceDataSyncOptions
 {

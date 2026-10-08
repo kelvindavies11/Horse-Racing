@@ -132,6 +132,12 @@ public sealed class CollectRawSourceHandlerTests
             get;
         } = [];
 
+        public Task<RawCollectionResult?> GetLatestSuccessfulAsync(
+            string jobName,
+            Uri sourceUri,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<RawCollectionResult?>(null);
+
         public Task<DateTimeOffset?> GetLatestStartAsync(
             Uri sourceUri,
             CancellationToken cancellationToken) =>

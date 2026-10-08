@@ -120,7 +120,8 @@ public sealed class ImportControlService
     {
         var observedProcesses = await GetImportProcessesAsync(cancellationToken);
         var activeProcess = observedProcesses.FirstOrDefault(process =>
-            process.CommandLine.Contains("HorseRacing.RaceDataSync", StringComparison.OrdinalIgnoreCase));
+            process.CommandLine.Contains("HorseRacing.RaceDataSync", StringComparison.OrdinalIgnoreCase)
+            || process.CommandLine.Contains("HorseRacing.Bha.CuratedPromoter", StringComparison.OrdinalIgnoreCase));
         var activePhaseId = FindActivePhaseId(observedProcesses, activeProcess);
         var activeMonth = GetActiveMonth(activeProcess);
         var activeStartedAtUtc = observedProcesses.Count == 0
@@ -490,6 +491,7 @@ public sealed class ImportControlService
                     $_.ProcessId -ne $PID -and
                     -not [string]::IsNullOrWhiteSpace($_.CommandLine) -and
                     ($_.CommandLine -match 'HorseRacing\.RaceDataSync' -or
+                        $_.CommandLine -match 'HorseRacing\.Bha\.CuratedPromoter' -or
                         $_.CommandLine -match 'resume-after-throttle\.ps1' -or
                         $_.CommandLine -match 'resume-monthly-race-data-history\.ps1' -or
                         $_.CommandLine -match 'resume-available-race-data-tail\.ps1')
@@ -551,7 +553,8 @@ public sealed class ImportControlService
 
     private static IReadOnlyList<ObservedImportProcess> GetRaceDataProcessesFallback()
     {
-        return Process.GetProcessesByName("HorseRacing.RaceDataSync")
+        return new[] { "HorseRacing.RaceDataSync", "HorseRacing.Bha.CuratedPromoter" }
+            .SelectMany(Process.GetProcessesByName)
             .Select(process =>
             {
                 using (process)

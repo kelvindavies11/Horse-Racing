@@ -40,11 +40,14 @@ public sealed record CollectRaceResultsHistoryCommand(
     DateOnly FromDate,
     DateOnly ToDate,
     string CollectorVersion,
-    TimeSpan DelayBetweenRequests);
+    TimeSpan DelayBetweenRequests,
+    bool ReuseSuccessfulPayloads = false);
 
 public sealed record CollectRaceResultsHistoryResult(
     int FixturesFound,
     int RacesFound,
     int ResultPayloadsCollected,
+    int PayloadsReused,
+    int UnavailableResultPayloads,
     int FailedCollections,
     IReadOnlyCollection<string> SuccessfulJobNames);

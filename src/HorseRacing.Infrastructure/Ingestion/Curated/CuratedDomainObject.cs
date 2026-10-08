@@ -73,6 +73,17 @@ public sealed class CuratedDomainObject
             throw new InvalidOperationException("The curated observation identity cannot be changed.");
         }
 
+        if (candidate.ObservedAtUtc < FirstObservedAtUtc)
+        {
+            FirstObservedAtUtc = candidate.ObservedAtUtc;
+        }
+
+        if (LastObservedAtUtc != default
+            && candidate.ObservedAtUtc < LastObservedAtUtc)
+        {
+            return;
+        }
+
         DisplayName = candidate.DisplayName;
         SourceUrl = candidate.SourceUri.AbsoluteUri;
         RawPayloadId = rawPayloadId;

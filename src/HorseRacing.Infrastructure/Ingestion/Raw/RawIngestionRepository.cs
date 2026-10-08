@@ -7,6 +7,37 @@ namespace HorseRacing.Infrastructure.Ingestion.Raw;
 public sealed class RawIngestionRepository(HorseRacingDbContext dbContext)
     : IRawIngestionRepository
 {
+    public async Task<RawCollectionResult?> GetLatestSuccessfulAsync(
+        string jobName,
+        Uri sourceUri,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(jobName);
+        ArgumentNullException.ThrowIfNull(sourceUri);
+
+        var payload = await dbContext.RawPayloads
+            .AsNoTracking()
+            .Include(item => item.CollectionRun)
+            .Where(item =>
+                item.CollectionRun.JobName == jobName
+                && item.CollectionRun.SourceUrl == sourceUri.AbsoluteUri
+                && item.CollectionRun.Outcome == RawCollectionOutcome.Succeeded)
+            .OrderByDescending(item => item.RetrievedAtUtc)
+            .ThenByDescending(item => item.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return payload is null
+            ? null
+            : new RawCollectionResult(
+                payload.CollectionRunId,
+                RawCollectionOutcome.Succeeded,
+                payload.Id,
+                payload.HttpStatusCode,
+                null,
+                null,
+                payload.Content);
+    }
+
     public Task<DateTimeOffset?> GetLatestStartAsync(
         Uri sourceUri,
         CancellationToken cancellationToken) =>

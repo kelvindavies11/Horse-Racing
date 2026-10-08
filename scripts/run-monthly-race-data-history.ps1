@@ -25,7 +25,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$projectPath = Join-Path $repositoryRoot 'src\HorseRacing.RaceDataSync'
+$rawProjectPath = Join-Path $repositoryRoot 'src\HorseRacing.RaceDataSync'
+$curatedProjectPath = Join-Path $repositoryRoot 'src\HorseRacing.Bha.CuratedPromoter'
 $solutionPath = Join-Path $repositoryRoot 'HorseRacing.sln'
 $statePath = if ([System.IO.Path]::IsPathRooted($StateDirectory)) {
     [System.IO.Path]::GetFullPath($StateDirectory)
@@ -98,6 +99,7 @@ if (-not $DryRun) {
             'Username=horse_racing;Password=horse_racing_local'
     }
     $env:ConnectionStrings__HorseRacing = $connectionString
+    $env:BhaCuratedPromotion__BatchSize = '1000'
 
     if (-not $SkipBuild) {
         & dotnet build $solutionPath --no-restore
@@ -131,7 +133,7 @@ foreach ($month in $months | Where-Object Index -ge $StartIndex) {
     }
 
     Write-Output (
-        '[{0}/{1}] {2} through {3}: Raw collection, Curated promotion, weather enrichment' -f
+        '[{0}/{1}] {2} through {3}: restartable Raw collection, then Curated drain' -f
         $month.Index,
         $monthCount,
         $month.From,
@@ -141,11 +143,20 @@ foreach ($month in $months | Where-Object Index -ge $StartIndex) {
         continue
     }
 
-    & dotnet run --no-build --project $projectPath -- `
+    Write-Output '  Raw job: collecting only missing payloads.'
+    & dotnet run --no-build --project $rawProjectPath -- `
+        --mode raw `
+        --reuse-successful `
         --from $month.From `
         --to $month.To
 
-    $exitCode = $LASTEXITCODE
+    $rawExitCode = $LASTEXITCODE
+
+    Write-Output '  Curated job: draining every pending Raw payload.'
+    & dotnet run --no-build --project $curatedProjectPath -- --drain
+    $curatedExitCode = $LASTEXITCODE
+
+    $exitCode = if ($rawExitCode -eq 0 -and $curatedExitCode -eq 0) { 0 } else { 1 }
     $status = if ($exitCode -eq 0) { 'Succeeded' } else { 'Failed' }
     [pscustomobject]@{
         MonthIndex = $month.Index
@@ -159,9 +170,11 @@ foreach ($month in $months | Where-Object Index -ge $StartIndex) {
     if ($exitCode -ne 0) {
         $failedMonths.Add("$($month.Index):$($month.From):$($month.To)")
         Write-Warning (
-            'Month {0} completed with exit code {1}; continuing with the next month.' -f
+            'Month {0} needs retrying (Raw exit {1}, Curated exit {2}); stopping this pass so the supervisor can wait and resume.' -f
             $month.Index,
-            $exitCode)
+            $rawExitCode,
+            $curatedExitCode)
+        break
     }
 }
 
@@ -177,4 +190,4 @@ if ($failedMonths.Count -gt 0) {
     exit 1
 }
 
-Write-Output "All $monthCount monthly collection and promotion runs completed successfully."
+Write-Output "All $monthCount restartable Raw jobs and following Curated drains completed successfully."
