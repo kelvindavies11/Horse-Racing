@@ -76,6 +76,12 @@ public sealed class ImportControlService
     private static readonly Regex SupervisorStartMonthPattern = new(
         @"-StartMonth\s+""?(?<month>\d{4}-\d{2})",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+    private static readonly Regex ThrottleLogPattern = new(
+        @"^(?<timestamp>\S+)\s+BHA API is (?:still )?throttled \(HTTP (?<status>\d+)\); waiting (?<minutes>\d+) minutes?\.$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+    private static readonly Regex ShortRetryLogPattern = new(
+        @"^(?<timestamp>\S+)\s+BHA API readiness probe returned (?<reason>.+); refreshing the public token and retrying in one minute\.$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     private static readonly JsonSerializerOptions ProcessJsonOptions = new()
     {
@@ -117,6 +123,7 @@ public sealed class ImportControlService
             : observedProcesses.Min(process => process.StartedAtUtc);
         var isRunning = observedProcesses.Count > 0;
         var isExecuting = activeProcess is not null;
+        var waitStatus = ReadWaitStatus(activePhaseId, isRunning, isExecuting);
         var phaseRows = Definitions.ToDictionary(
             definition => definition.Id,
             definition => ReadProgress(definition),
@@ -179,7 +186,9 @@ public sealed class ImportControlService
         return new ImportControlSnapshot(
             DateTimeOffset.UtcNow,
             isRunning,
-            isExecuting ? "Running" : isRunning ? "Waiting" : "Idle",
+            isExecuting ? "Running" : waitStatus?.State ?? (isRunning ? "Waiting" : "Idle"),
+            waitStatus?.Message,
+            waitStatus?.NextRetryAtUtc,
             activePhaseId,
             activeMonth,
             activeStartedAtUtc,
@@ -293,6 +302,73 @@ public sealed class ImportControlService
             return [];
         }
     }
+
+    private ImportWaitStatus? ReadWaitStatus(
+        string? activePhaseId,
+        bool isRunning,
+        bool isExecuting)
+    {
+        if (!isRunning || isExecuting || activePhaseId is null)
+        {
+            return null;
+        }
+
+        var definition = Definitions.FirstOrDefault(candidate => candidate.Id == activePhaseId);
+        if (definition is null)
+        {
+            return null;
+        }
+
+        var logPath = Path.Combine(repositoryRoot, definition.StateDirectory, "resume.stdout.log");
+        if (!File.Exists(logPath))
+        {
+            return null;
+        }
+
+        try
+        {
+            foreach (var line in File.ReadLines(logPath).Reverse().Take(50))
+            {
+                var throttle = ThrottleLogPattern.Match(line);
+                if (throttle.Success
+                    && TryReadLogTimestamp(throttle, out var throttledAtUtc)
+                    && int.TryParse(
+                        throttle.Groups["minutes"].Value,
+                        NumberStyles.None,
+                        CultureInfo.InvariantCulture,
+                        out var waitMinutes))
+                {
+                    var statusCode = throttle.Groups["status"].Value;
+                    return new(
+                        "Throttled",
+                        $"BHA returned HTTP {statusCode}. Requests are paused to respect the upstream limit.",
+                        throttledAtUtc.AddMinutes(waitMinutes));
+                }
+
+                var shortRetry = ShortRetryLogPattern.Match(line);
+                if (shortRetry.Success && TryReadLogTimestamp(shortRetry, out var retryAtUtc))
+                {
+                    return new(
+                        "Waiting",
+                        $"BHA readiness returned {shortRetry.Groups["reason"].Value}.",
+                        retryAtUtc.AddMinutes(1));
+                }
+            }
+        }
+        catch (IOException exception)
+        {
+            logger.LogDebug(exception, "The import resume log was busy: {LogPath}", logPath);
+        }
+
+        return null;
+    }
+
+    private static bool TryReadLogTimestamp(Match match, out DateTimeOffset timestamp) =>
+        DateTimeOffset.TryParse(
+            match.Groups["timestamp"].Value,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal,
+            out timestamp);
 
     private static ImportProgressRow? ParseProgressRow(string line)
     {
@@ -580,12 +656,19 @@ public sealed class ImportControlService
         string Name,
         string CommandLine,
         DateTimeOffset StartedAtUtc);
+
+    private sealed record ImportWaitStatus(
+        string State,
+        string Message,
+        DateTimeOffset NextRetryAtUtc);
 }
 
 public sealed record ImportControlSnapshot(
     DateTimeOffset GeneratedAtUtc,
     bool IsImportRunning,
     string RunnerState,
+    string? RunnerMessage,
+    DateTimeOffset? NextRetryAtUtc,
     string? ActivePhaseId,
     string? ActiveMonth,
     DateTimeOffset? ActiveStartedAtUtc,

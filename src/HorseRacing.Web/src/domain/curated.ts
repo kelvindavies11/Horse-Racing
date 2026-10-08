@@ -231,6 +231,8 @@ export interface ImportControlSnapshot {
   generatedAtUtc: string;
   isImportRunning: boolean;
   runnerState: string;
+  runnerMessage?: string | null;
+  nextRetryAtUtc?: string | null;
   activePhaseId?: string | null;
   activeMonth?: string | null;
   activeStartedAtUtc?: string | null;

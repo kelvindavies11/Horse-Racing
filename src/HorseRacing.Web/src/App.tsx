@@ -683,13 +683,16 @@ const ImportControlPage = ({
           <p className="kicker">Single-runner slot</p>
           <h2>{data.isImportRunning ? activePhase?.name ?? "Import detected" : "Ready for dispatch"}</h2>
           <p>{data.isImportRunning
-            ? data.activeMonth
+            ? data.runnerMessage
+              ? data.runnerMessage
+              : data.activeMonth
               ? `${calendarMonth.format(new Date(`${data.activeMonth}-01T00:00:00Z`))} is being collected, curated and weather-enriched.`
               : "The resume process is waiting for its next safe attempt."
             : "No BHA import process is active. An eligible phase can claim the slot."}</p>
         </div>
         <div className="runner-facts">
           <span><small>State</small><strong>{data.runnerState}</strong></span>
+          <span><small>Next retry</small><strong>{data.nextRetryAtUtc ? formatDateTime(data.nextRetryAtUtc) : "—"}</strong></span>
           <span><small>Started</small><strong>{data.activeStartedAtUtc ? formatDateTime(data.activeStartedAtUtc) : "—"}</strong></span>
           <span><small>Protected processes</small><strong>{number.format(data.activeProcessCount)}</strong></span>
         </div>

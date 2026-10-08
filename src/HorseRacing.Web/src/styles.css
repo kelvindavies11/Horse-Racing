@@ -330,6 +330,8 @@ svg { width: 1.15rem; height: 1.15rem; flex: 0 0 auto; }
 .runner-pulse i { z-index: 1; width: 19px; height: 19px; border: 5px solid var(--forest-deep); border-radius: 50%; background: #7f8b87; box-shadow: 0 0 0 1px #7f8b87, 0 0 0 13px rgba(127,139,135,.11); }
 .runner-console--running .runner-pulse i { background: var(--lime); box-shadow: 0 0 0 1px var(--lime), 0 0 0 13px rgba(216,255,115,.12); animation: runner-heartbeat 1.8s ease-in-out infinite; }
 .runner-console--waiting .runner-pulse i { background: #ffcf63; box-shadow: 0 0 0 1px #ffcf63, 0 0 0 13px rgba(255,207,99,.12); }
+.runner-console--throttled { box-shadow: 7px 7px 0 #f0a23a; }
+.runner-console--throttled .runner-pulse i { background: #f0a23a; box-shadow: 0 0 0 1px #f0a23a, 0 0 0 13px rgba(240,162,58,.15); animation: runner-heartbeat 3.4s ease-in-out infinite; }
 @keyframes runner-orbit { to { transform: rotate(360deg); } }
 @keyframes runner-heartbeat { 50% { transform: scale(1.25); box-shadow: 0 0 0 1px var(--lime), 0 0 0 22px rgba(216,255,115,.03); } }
 .runner-copy { position: relative; z-index: 1; }

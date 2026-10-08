@@ -215,15 +215,17 @@ const raceResults: RaceResultsFeed = {
 const imports: ImportControlSnapshot = {
   generatedAtUtc: "2026-10-07T17:50:00Z",
   isImportRunning: true,
-  runnerState: "Running",
+  runnerState: "Throttled",
+  runnerMessage: "BHA returned HTTP 418. Requests are paused to respect the upstream limit.",
+  nextRetryAtUtc: "2026-10-07T17:45:00Z",
   activePhaseId: "year-2026",
-  activeMonth: "2026-10",
+  activeMonth: null,
   activeStartedAtUtc: "2026-10-07T17:30:00Z",
   activeProcessCount: 2,
   totalMonths: 72,
-  succeededMonths: 2,
+  succeededMonths: 0,
   failedMonths: 0,
-  queuedMonths: 69,
+  queuedMonths: 71,
   phases: [{
     id: "year-2026",
     name: "2026 results",
@@ -231,11 +233,11 @@ const imports: ImportControlSnapshot = {
     startMonth: "2026-01",
     endMonth: "2026-12",
     totalMonths: 12,
-    succeededMonths: 2,
+    succeededMonths: 0,
     failedMonths: 0,
-    queuedMonths: 9,
-    runningMonths: 1,
-    status: "Running",
+    queuedMonths: 12,
+    runningMonths: 0,
+    status: "Waiting",
     canStart: false,
     startBlocker: "Another import owns the single-runner slot.",
   }, ...[2024, 2023, 2022, 2021, 2020].map((year) => ({
@@ -254,13 +256,13 @@ const imports: ImportControlSnapshot = {
     startBlocker: "Another import owns the single-runner slot.",
   }))],
   jobs: [{
-    id: "year-2026:2026-10",
+    id: "year-2026:2026-01",
     phaseId: "year-2026",
     phaseName: "2026 results",
-    month: "2026-10",
-    from: "2026-10-01",
-    to: "2026-10-31",
-    status: "Running",
+    month: "2026-01",
+    from: "2026-01-01",
+    to: "2026-01-31",
+    status: "Waiting",
     attempts: 0,
     startedAtUtc: "2026-10-07T17:30:00Z",
   }],
@@ -405,7 +407,9 @@ describe("curated data workspace", () => {
     expect(screen.getByRole("heading", { level: 3, name: "2024 results" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 3, name: "2020 results" })).toBeInTheDocument();
     expect(screen.getByRole("table", { name: "Monthly import queue" })).toBeInTheDocument();
-    expect(screen.getByText("October 2026")).toBeInTheDocument();
+    expect(screen.getByText("January 2026")).toBeInTheDocument();
+    expect(screen.getByText(/BHA returned HTTP 418/)).toBeInTheDocument();
+    expect(screen.getByText("Next retry")).toBeInTheDocument();
     expect(screen.getByText("Protected processes")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Start phase" }).every((button) => button.hasAttribute("disabled"))).toBe(true);
   });
