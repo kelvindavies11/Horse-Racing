@@ -46,6 +46,7 @@ $apiProbeUri = [uri](
     'https://api09.horseracing.software/bha/v1/fixtures/' +
     '?resultsAvailable=1&fields=fixtureId&page=1&per_page=1')
 $buildCompleted = $false
+$script:BhaProbeRetrySeconds = $ProbeIntervalMinutes * 60
 
 New-Item -ItemType Directory -Path $statePath -Force | Out-Null
 $env:RaceDataSync__DelayBetweenRequestsMilliseconds =
@@ -79,6 +80,7 @@ function Get-PublicBhaToken {
 }
 
 function Test-BhaApiReady([string] $Token) {
+    $script:BhaProbeRetrySeconds = $ProbeIntervalMinutes * 60
     $headers = @{
         Authorization = "Bearer $Token"
         Accept = 'application/json'
@@ -104,11 +106,20 @@ function Test-BhaApiReady([string] $Token) {
         }
 
         if ($statusCode -in @(418, 429)) {
-            Write-Output (
+            Write-Host (
                 '{0:o} BHA API is still throttled (HTTP {1}); waiting {2} minutes.' -f
                 [datetime]::UtcNow,
                 $statusCode,
                 $ProbeIntervalMinutes)
+            return $false
+        }
+
+        if ($statusCode -in @(0, 401, 403)) {
+            $script:BhaProbeRetrySeconds = 60
+            Write-Host (
+                '{0:o} BHA API readiness probe returned {1}; refreshing the public token and retrying in one minute.' -f
+                [datetime]::UtcNow,
+                $(if ($statusCode -eq 0) { 'no HTTP status' } else { "HTTP $statusCode" }))
             return $false
         }
 
@@ -163,7 +174,7 @@ while ((Get-SucceededMonthCount) -lt $monthCount) {
     $env:BhaCollection__RacingStatusApiBearerToken = $bhaToken
 
     while (-not (Test-BhaApiReady -Token $bhaToken)) {
-        Start-Sleep -Seconds ($ProbeIntervalMinutes * 60)
+        Start-Sleep -Seconds $script:BhaProbeRetrySeconds
         $bhaToken = Get-PublicBhaToken
         $env:BhaCollection__RacingStatusApiBearerToken = $bhaToken
     }
