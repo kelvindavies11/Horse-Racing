@@ -3,6 +3,8 @@ using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using HorseRacing.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 namespace HorseRacing.Api;
 
@@ -99,21 +101,26 @@ public sealed class ImportControlService
         CreateYearPhase(2020),
     ];
 
+    private static readonly SemaphoreSlim StartLock = new(1, 1);
+    private readonly HorseRacingDbContext dbContext;
     private readonly ILogger<ImportControlService> logger;
     private readonly string repositoryRoot;
-    private readonly SemaphoreSlim startLock = new(1, 1);
 
     public ImportControlService(
         IWebHostEnvironment environment,
+        HorseRacingDbContext dbContext,
         ILogger<ImportControlService> logger)
     {
+        this.dbContext = dbContext;
         this.logger = logger;
         repositoryRoot = FindRepositoryRoot(environment.ContentRootPath);
     }
 
     public async Task<ImportControlSnapshot> GetSnapshotAsync(CancellationToken cancellationToken)
     {
+        var auditCountsTask = GetAuditCountsAsync(cancellationToken);
         var observedProcesses = await GetImportProcessesAsync(cancellationToken);
+        var auditCounts = await auditCountsTask;
         var activeRawProcesses = observedProcesses
             .Where(process => process.CommandLine.Contains(
                 "HorseRacing.RaceDataSync",
@@ -147,6 +154,7 @@ public sealed class ImportControlService
             .SelectMany(definition => BuildJobs(
                 definition,
                 phaseRows[definition.Id],
+                auditCounts,
                 activePhaseId,
                 activeMonths,
                 isRunning,
@@ -222,7 +230,7 @@ public sealed class ImportControlService
         string phaseId,
         CancellationToken cancellationToken)
     {
-        await startLock.WaitAsync(cancellationToken);
+        await StartLock.WaitAsync(cancellationToken);
         try
         {
             var definition = Definitions.FirstOrDefault(candidate => candidate.Id == phaseId);
@@ -292,8 +300,119 @@ public sealed class ImportControlService
         }
         finally
         {
-            startLock.Release();
+            StartLock.Release();
         }
+    }
+
+    private async Task<IReadOnlyDictionary<string, ImportRunnerAuditCounts>> GetAuditCountsAsync(
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            WITH mapped_raw AS (
+                SELECT
+                    collection_run.id,
+                    collection_run.outcome,
+                    COALESCE(
+                        collection_run.dispatch_item_id,
+                        CASE
+                            WHEN collection_run.job_name ~ '^bha-results-fixtures-[0-9]{{4}}-[0-9]{{2}}-p[0-9]+$'
+                                THEN regexp_replace(
+                                    collection_run.job_name,
+                                    '^bha-results-fixtures-([0-9]{{4}})-([0-9]{{2}})-p[0-9]+$',
+                                    'year-\1:\1-\2')
+                            WHEN collection_run.job_name ~ '^bha-results-races-[0-9]{{4}}-[0-9]+$'
+                                AND meeting.id IS NOT NULL
+                                THEN 'year-' || left(meeting.source_key, 4) || ':' ||
+                                    left(meeting.source_data #>> '{{foundData,fixtureDate}}', 7)
+                            WHEN collection_run.job_name ~ '^bha-results-runners-[0-9]{{4}}-[0-9]+-[0-9]+$'
+                                AND race.id IS NOT NULL
+                                THEN 'year-' || left(race.source_key, 4) || ':' ||
+                                    left(race.source_data #>> '{{foundData,raceDate}}', 7)
+                        END) AS dispatch_item_id
+                FROM raw.collection_runs AS collection_run
+                LEFT JOIN curated.domain_objects AS meeting
+                    ON meeting.source_system = 'BHA'
+                    AND meeting.domain_object_type = 'Meeting'
+                    AND meeting.source_key = regexp_replace(
+                        collection_run.job_name,
+                        '^bha-results-races-([0-9]{{4}})-([0-9]+)$',
+                        '\1:\2')
+                LEFT JOIN curated.domain_objects AS race
+                    ON race.source_system = 'BHA'
+                    AND race.domain_object_type = 'Race'
+                    AND race.source_key = regexp_replace(
+                        collection_run.job_name,
+                        '^bha-results-runners-([0-9]{{4}})-([0-9]+)-([0-9]+)$',
+                        '\1:\2:\3')
+                WHERE collection_run.dispatch_item_id IS NOT NULL
+                    OR collection_run.job_name LIKE 'bha-results-%'
+            ),
+            raw_counts AS (
+                SELECT
+                    dispatch_item_id,
+                    count(*)::integer AS total,
+                    count(*) FILTER (WHERE outcome = 'Running')::integer AS running,
+                    count(*) FILTER (WHERE outcome = 'Succeeded')::integer AS succeeded,
+                    count(*) FILTER (WHERE outcome = 'Failed')::integer AS failed,
+                    count(*) FILTER (WHERE outcome = 'Cancelled')::integer AS cancelled
+                FROM mapped_raw
+                WHERE dispatch_item_id IS NOT NULL
+                GROUP BY dispatch_item_id
+            ),
+            curated_counts AS (
+                SELECT
+                    mapped_raw.dispatch_item_id,
+                    count(*)::integer AS total,
+                    count(*) FILTER (WHERE promotion.outcome = 'Running')::integer AS running,
+                    count(*) FILTER (WHERE promotion.outcome = 'Succeeded')::integer AS succeeded,
+                    count(*) FILTER (WHERE promotion.outcome = 'Skipped')::integer AS skipped,
+                    count(*) FILTER (WHERE promotion.outcome = 'Failed')::integer AS failed,
+                    count(*) FILTER (WHERE promotion.outcome = 'Cancelled')::integer AS cancelled
+                FROM curated.promotion_runs AS promotion
+                INNER JOIN mapped_raw ON mapped_raw.id = promotion.raw_collection_run_id
+                WHERE mapped_raw.dispatch_item_id IS NOT NULL
+                GROUP BY mapped_raw.dispatch_item_id
+            )
+            SELECT
+                COALESCE(raw_counts.dispatch_item_id, curated_counts.dispatch_item_id) AS "DispatchItemId",
+                COALESCE(raw_counts.total, 0) AS "RawTotal",
+                COALESCE(raw_counts.running, 0) AS "RawRunning",
+                COALESCE(raw_counts.succeeded, 0) AS "RawSucceeded",
+                COALESCE(raw_counts.failed, 0) AS "RawFailed",
+                COALESCE(raw_counts.cancelled, 0) AS "RawCancelled",
+                COALESCE(curated_counts.total, 0) AS "CuratedTotal",
+                COALESCE(curated_counts.running, 0) AS "CuratedRunning",
+                COALESCE(curated_counts.succeeded, 0) AS "CuratedSucceeded",
+                COALESCE(curated_counts.skipped, 0) AS "CuratedSkipped",
+                COALESCE(curated_counts.failed, 0) AS "CuratedFailed",
+                COALESCE(curated_counts.cancelled, 0) AS "CuratedCancelled"
+            FROM raw_counts
+            FULL OUTER JOIN curated_counts
+                ON curated_counts.dispatch_item_id = raw_counts.dispatch_item_id
+            """;
+
+        var rows = await dbContext.Database
+            .SqlQueryRaw<ImportAuditCountRow>(sql)
+            .ToListAsync(cancellationToken);
+
+        return rows.ToDictionary(
+            row => row.DispatchItemId,
+            row => new ImportRunnerAuditCounts(
+                new ImportAuditOutcomeCounts(
+                    row.RawTotal,
+                    row.RawRunning,
+                    row.RawSucceeded,
+                    0,
+                    row.RawFailed,
+                    row.RawCancelled),
+                new ImportAuditOutcomeCounts(
+                    row.CuratedTotal,
+                    row.CuratedRunning,
+                    row.CuratedSucceeded,
+                    row.CuratedSkipped,
+                    row.CuratedFailed,
+                    row.CuratedCancelled)),
+            StringComparer.Ordinal);
     }
 
     private IReadOnlyList<ImportProgressRow> ReadProgress(ImportPhaseDefinition definition)
@@ -439,6 +558,7 @@ public sealed class ImportControlService
     private static IEnumerable<ImportMonthJob> BuildJobs(
         ImportPhaseDefinition definition,
         IReadOnlyList<ImportProgressRow> rows,
+        IReadOnlyDictionary<string, ImportRunnerAuditCounts> auditCounts,
         string? activePhaseId,
         IReadOnlyDictionary<string, DateTimeOffset> activeMonths,
         bool isImportRunning,
@@ -448,6 +568,7 @@ public sealed class ImportControlService
         for (var month = definition.StartMonth; month <= definition.EndMonth; month = month.AddMonths(1))
         {
             var monthKey = month.ToString("yyyy-MM", CultureInfo.InvariantCulture);
+            var jobId = $"{definition.Id}:{monthKey}";
             var attempts = rows.Where(row =>
                 row.From.Year == month.Year && row.From.Month == month.Month).ToArray();
             var latest = attempts.LastOrDefault();
@@ -471,7 +592,7 @@ public sealed class ImportControlService
                         : "Failed";
 
             yield return new(
-                $"{definition.Id}:{monthKey}",
+                jobId,
                 definition.Id,
                 definition.Name,
                 monthKey,
@@ -481,7 +602,8 @@ public sealed class ImportControlService
                 attempts.Length,
                 isActive ? monthStartedAtUtc : null,
                 latest?.CompletedAtUtc,
-                latest?.ExitCode);
+                latest?.ExitCode,
+                auditCounts.GetValueOrDefault(jobId) ?? ImportRunnerAuditCounts.Empty);
         }
     }
 
@@ -696,6 +818,22 @@ public sealed class ImportControlService
         string State,
         string Message,
         DateTimeOffset NextRetryAtUtc);
+
+    private sealed class ImportAuditCountRow
+    {
+        public string DispatchItemId { get; init; } = string.Empty;
+        public int RawTotal { get; init; }
+        public int RawRunning { get; init; }
+        public int RawSucceeded { get; init; }
+        public int RawFailed { get; init; }
+        public int RawCancelled { get; init; }
+        public int CuratedTotal { get; init; }
+        public int CuratedRunning { get; init; }
+        public int CuratedSucceeded { get; init; }
+        public int CuratedSkipped { get; init; }
+        public int CuratedFailed { get; init; }
+        public int CuratedCancelled { get; init; }
+    }
 }
 
 public sealed record ImportControlSnapshot(
@@ -744,6 +882,27 @@ public sealed record ImportMonthJob(
     int Attempts,
     DateTimeOffset? StartedAtUtc,
     DateTimeOffset? CompletedAtUtc,
-    int? ExitCode);
+    int? ExitCode,
+    ImportRunnerAuditCounts AuditCounts);
+
+public sealed record ImportRunnerAuditCounts(
+    ImportAuditOutcomeCounts Raw,
+    ImportAuditOutcomeCounts Curated)
+{
+    public static ImportRunnerAuditCounts Empty { get; } = new(
+        ImportAuditOutcomeCounts.Empty,
+        ImportAuditOutcomeCounts.Empty);
+}
+
+public sealed record ImportAuditOutcomeCounts(
+    int Total,
+    int Running,
+    int Succeeded,
+    int Skipped,
+    int Failed,
+    int Cancelled)
+{
+    public static ImportAuditOutcomeCounts Empty { get; } = new(0, 0, 0, 0, 0, 0);
+}
 
 public sealed record StartImportResult(bool Started, string Message, int? ProcessId);

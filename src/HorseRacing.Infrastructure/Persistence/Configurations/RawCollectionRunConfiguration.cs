@@ -30,6 +30,7 @@ public sealed class RawCollectionRunConfiguration
         builder.Property(run => run.SourceName).HasColumnName("source_name").HasMaxLength(200).IsRequired();
         builder.Property(run => run.SourceUrl).HasColumnName("source_url").HasMaxLength(2048).IsRequired();
         builder.Property(run => run.CollectorVersion).HasColumnName("collector_version").HasMaxLength(50).IsRequired();
+        builder.Property(run => run.DispatchItemId).HasColumnName("dispatch_item_id").HasMaxLength(50);
         builder.Property(run => run.StartedAtUtc).HasColumnName("started_at_utc").IsRequired();
         builder.Property(run => run.CompletedAtUtc).HasColumnName("completed_at_utc");
         builder.Property(run => run.Outcome)
@@ -43,6 +44,8 @@ public sealed class RawCollectionRunConfiguration
 
         builder.HasIndex(run => new { run.SourceUrl, run.StartedAtUtc })
             .HasDatabaseName("ix_raw_collection_runs_source_started");
+        builder.HasIndex(run => new { run.DispatchItemId, run.Outcome })
+            .HasDatabaseName("ix_raw_collection_runs_dispatch_outcome");
         builder.HasIndex(run => new { run.JobName, run.SourceUrl })
             .IsUnique()
             .HasFilter("outcome = 'Running'")

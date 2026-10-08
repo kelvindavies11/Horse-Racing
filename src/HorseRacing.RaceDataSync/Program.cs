@@ -53,6 +53,20 @@ if (mode is not ("all" or "raw" or "weather"))
 }
 
 var reuseSuccessfulPayloads = HasSwitch(args, "--reuse-successful");
+var dispatchItemId = ReadArgument(args, "--dispatch-item");
+if (dispatchItemId is not null)
+{
+    var expectedDispatchItemId = $"year-{fromDate.Year}:{fromDate:yyyy-MM}";
+    if (!string.Equals(dispatchItemId, expectedDispatchItemId, StringComparison.Ordinal)
+        || fromDate.Year != toDate.Year
+        || fromDate.Month != toDate.Month)
+    {
+        logger.LogError(
+            "--dispatch-item must be {ExpectedDispatchItemId} for the requested single-month range.",
+            expectedDispatchItemId);
+        return 2;
+    }
+}
 
 using var shutdown = new CancellationTokenSource();
 Console.CancelKeyPress += (_, eventArgs) =>
@@ -80,7 +94,8 @@ try
                 toDate,
                 options.CollectorVersion,
                 TimeSpan.FromMilliseconds(options.DelayBetweenRequestsMilliseconds),
-                reuseSuccessfulPayloads),
+                reuseSuccessfulPayloads,
+                dispatchItemId),
             shutdown.Token);
         logger.LogInformation(
             "Raw collection found {Fixtures} fixtures and {Races} races, captured {Results} new result payloads, " +

@@ -200,7 +200,8 @@ public sealed class CollectRaceResultsHistoryHandler(
                 sourceName,
                 sourceUri,
                 command.CollectorVersion,
-                command.DelayBetweenRequests),
+                command.DelayBetweenRequests,
+                command.DispatchItemId),
             cancellationToken);
 
         return new CollectionAttempt(result, false);

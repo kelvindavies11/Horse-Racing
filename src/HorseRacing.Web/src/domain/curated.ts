@@ -229,6 +229,21 @@ export interface ImportMonthJob {
   startedAtUtc?: string | null;
   completedAtUtc?: string | null;
   exitCode?: number | null;
+  auditCounts: ImportRunnerAuditCounts;
+}
+
+export interface ImportAuditOutcomeCounts {
+  total: number;
+  running: number;
+  succeeded: number;
+  skipped: number;
+  failed: number;
+  cancelled: number;
+}
+
+export interface ImportRunnerAuditCounts {
+  raw: ImportAuditOutcomeCounts;
+  curated: ImportAuditOutcomeCounts;
 }
 
 export interface ImportControlSnapshot {

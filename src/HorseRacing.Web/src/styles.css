@@ -380,7 +380,7 @@ svg { width: 1.15rem; height: 1.15rem; flex: 0 0 auto; }
 .queue-filters label span { color: var(--muted); font: 600 .49rem var(--mono); letter-spacing: .08em; text-transform: uppercase; }
 .queue-filters select { margin: 3px -4px 0; border: 0; outline: 0; background: transparent; font-size: .65rem; font-weight: 700; }
 .import-table { overflow-x: auto; border: 1px solid var(--ink); background: var(--cream); }
-.import-row { display: grid; min-width: 1090px; grid-template-columns: 190px minmax(180px, 1.4fr) 125px 80px 145px 145px 60px; border-bottom: 1px solid var(--line); }
+.import-row { display: grid; min-width: 1430px; grid-template-columns: 190px minmax(180px, 1.4fr) 125px 190px 210px 80px 145px 145px 60px; border-bottom: 1px solid var(--line); }
 .import-row:last-child { border-bottom: 0; }
 .import-row > span { display: flex; min-width: 0; flex-direction: column; justify-content: center; min-height: 61px; padding: 11px 12px; overflow-wrap: anywhere; border-right: 1px solid var(--line); font-size: .66rem; }
 .import-row > span:last-child { border-right: 0; }
@@ -389,6 +389,17 @@ svg { width: 1.15rem; height: 1.15rem; flex: 0 0 auto; }
 .import-row--head > span { min-height: 39px; font: 650 .51rem var(--mono); letter-spacing: .08em; text-transform: uppercase; }
 .import-row--running { background: #f0f3ff; box-shadow: inset 4px 0 0 #4263eb; }
 .import-row--failed { background: #fff5f1; }
+.import-row > .import-audit-cell { gap: 7px; align-items: flex-start; }
+.import-audit-total { display: flex; gap: 5px; align-items: baseline; }
+.import-audit-total strong { font: 760 .8rem var(--mono); }
+.import-audit-total small { margin: 0 !important; text-transform: uppercase; }
+.import-audit-counts { display: flex; gap: 4px; flex-wrap: wrap; }
+.import-audit-count { padding: 3px 5px; border: 1px solid currentColor; border-radius: 999px; font: 700 .48rem var(--mono); font-style: normal; white-space: nowrap; }
+.import-audit-count--succeeded { color: #116743; background: #dff5e8; }
+.import-audit-count--failed { color: #9b2f1f; background: #ffe3dc; }
+.import-audit-count--running { color: #2949aa; background: #e2e9ff; }
+.import-audit-count--skipped { color: #755d11; background: #fff2bf; }
+.import-audit-count--cancelled { color: #606663; background: #eceeeb; }
 .queue-empty { display: flex; gap: 10px; align-items: center; justify-content: center; min-height: 160px; color: var(--muted); font-size: .75rem; }
 
 .results-heading { align-items: center; }

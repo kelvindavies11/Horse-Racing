@@ -12,6 +12,7 @@ import type {
   CuratedEntityConnections,
   CuratedRaceResult,
   CuratedEntity,
+  ImportMonthJob,
   ImportPhaseStatus,
   JsonValue,
   PromotionRunAudit,
@@ -732,11 +733,13 @@ const ImportControlPage = ({
           </div>
         </div>
         <div className="import-table" role="table" aria-label="Monthly import queue">
-          <div className="import-row import-row--head" role="row"><span>Runner</span><span>Phase</span><span>Status</span><span>Attempts</span><span>Started</span><span>Finished</span><span>Exit</span></div>
+          <div className="import-row import-row--head" role="row"><span>Runner</span><span>Phase</span><span>Status</span><span>Raw audit</span><span>Curated audit</span><span>Attempts</span><span>Started</span><span>Finished</span><span>Exit</span></div>
           {queuePages.pageItems.map((job) => <div className={`import-row import-row--${job.status.toLowerCase().replace(" ", "-")}`} role="row" key={job.id}>
             <span><strong>{calendarMonth.format(new Date(`${job.month}-01T00:00:00Z`))}</strong><small>{job.from} → {job.to}</small></span>
             <span>{job.phaseName}</span>
             <span><Outcome value={job.status} /></span>
+            <ImportAuditCell label="Raw" counts={job.auditCounts.raw} />
+            <ImportAuditCell label="Curated" counts={job.auditCounts.curated} showSkipped />
             <span>{number.format(job.attempts)}</span>
             <span>{job.startedAtUtc ? formatDateTime(job.startedAtUtc) : "—"}</span>
             <span>{job.completedAtUtc ? formatDateTime(job.completedAtUtc) : "—"}</span>
@@ -778,6 +781,25 @@ const ImportPhaseCard = ({
     {!armed && phase.startBlocker && <small className="phase-blocker">{phase.startBlocker}</small>}
   </article>;
 };
+
+const ImportAuditCell = ({
+  label,
+  counts,
+  showSkipped = false,
+}: {
+  label: string;
+  counts: ImportMonthJob["auditCounts"]["raw"];
+  showSkipped?: boolean;
+}) => <span className="import-audit-cell" aria-label={`${label} audit: ${counts.total} total, ${counts.succeeded} succeeded, ${counts.failed} failed, ${counts.running} running, ${counts.cancelled} cancelled${showSkipped ? `, ${counts.skipped} skipped` : ""}`}>
+  <span className="import-audit-total"><strong>{number.format(counts.total)}</strong><small>records</small></span>
+  <span className="import-audit-counts">
+    <i className="import-audit-count import-audit-count--succeeded" title="Succeeded">OK {number.format(counts.succeeded)}</i>
+    <i className="import-audit-count import-audit-count--failed" title="Failed">Fail {number.format(counts.failed)}</i>
+    <i className="import-audit-count import-audit-count--running" title="Running">Run {number.format(counts.running)}</i>
+    {showSkipped && <i className="import-audit-count import-audit-count--skipped" title="Skipped">Skip {number.format(counts.skipped)}</i>}
+    <i className="import-audit-count import-audit-count--cancelled" title="Cancelled">Stop {number.format(counts.cancelled)}</i>
+  </span>
+</span>;
 
 const AdminPage = ({ data, error, isLoading, reload }: { data?: AuditSnapshot; error?: string; isLoading: boolean; reload: () => void }) => {
   const [tab, setTab] = useState<AuditTab>("raw");

@@ -268,6 +268,10 @@ const imports: ImportControlSnapshot = {
     status: "Waiting",
     attempts: 0,
     startedAtUtc: "2026-10-07T17:30:00Z",
+    auditCounts: {
+      raw: { total: 24, running: 1, succeeded: 21, skipped: 0, failed: 2, cancelled: 0 },
+      curated: { total: 18, running: 0, succeeded: 15, skipped: 2, failed: 1, cancelled: 0 },
+    },
   }],
 };
 
@@ -415,6 +419,8 @@ describe("curated data workspace", () => {
     expect(screen.getByText(/BHA returned HTTP 418/)).toBeInTheDocument();
     expect(screen.getByText("Next retry")).toBeInTheDocument();
     expect(screen.getByText("Protected processes")).toBeInTheDocument();
+    expect(screen.getByLabelText("Raw audit: 24 total, 21 succeeded, 2 failed, 1 running, 0 cancelled")).toBeInTheDocument();
+    expect(screen.getByLabelText("Curated audit: 18 total, 15 succeeded, 1 failed, 0 running, 0 cancelled, 2 skipped")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Start phase" }).every((button) => button.hasAttribute("disabled"))).toBe(true);
   });
 

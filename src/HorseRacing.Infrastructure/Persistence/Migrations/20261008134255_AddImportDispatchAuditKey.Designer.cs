@@ -3,6 +3,7 @@ using System;
 using HorseRacing.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace HorseRacing.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(HorseRacingDbContext))]
-    partial class HorseRacingDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261008134255_AddImportDispatchAuditKey")]
+    partial class AddImportDispatchAuditKey
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

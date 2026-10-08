@@ -55,6 +55,7 @@ public sealed class CollectRaceResultsHistoryHandlerTests
         Assert.Equal(1, result.UnavailableResultPayloads);
         Assert.Equal(0, result.FailedCollections);
         Assert.Equal(4, client.Requests.Count);
+        Assert.All(repository.Starts, start => Assert.Equal("year-2023:2023-08", start.DispatchItemId));
         Assert.Contains(repository.Finishes, item =>
             item.Completion.Outcome == RawCollectionOutcome.Failed
             && item.Completion.HttpStatusCode == 404);
@@ -86,7 +87,13 @@ public sealed class CollectRaceResultsHistoryHandlerTests
         new(client, interpreter, repository, TimeProvider.System);
 
     private static CollectRaceResultsHistoryCommand CreateCommand(bool reuse = false) =>
-        new(FromDate, ToDate, "2.0.0", TimeSpan.Zero, reuse);
+        new(
+            FromDate,
+            ToDate,
+            "2.0.0",
+            TimeSpan.Zero,
+            reuse,
+            DispatchItemId: "year-2023:2023-08");
 
     private static RawSourceResponse Success(Uri? uri = null) =>
         Response(uri ?? new Uri("https://example.test/success"), 200, "OK");

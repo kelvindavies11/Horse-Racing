@@ -15,6 +15,7 @@ public sealed class RawCollectionRun
         SourceName = start.SourceName;
         SourceUrl = start.SourceUri.AbsoluteUri;
         CollectorVersion = start.CollectorVersion;
+        DispatchItemId = start.DispatchItemId;
         StartedAtUtc = start.StartedAtUtc;
         Outcome = RawCollectionOutcome.Running;
     }
@@ -28,6 +29,8 @@ public sealed class RawCollectionRun
     public string SourceUrl { get; private set; } = string.Empty;
 
     public string CollectorVersion { get; private set; } = string.Empty;
+
+    public string? DispatchItemId { get; private set; }
 
     public DateTimeOffset StartedAtUtc { get; private set; }
 

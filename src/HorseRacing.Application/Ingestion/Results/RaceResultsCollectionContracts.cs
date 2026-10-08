@@ -41,7 +41,8 @@ public sealed record CollectRaceResultsHistoryCommand(
     DateOnly ToDate,
     string CollectorVersion,
     TimeSpan DelayBetweenRequests,
-    bool ReuseSuccessfulPayloads = false);
+    bool ReuseSuccessfulPayloads = false,
+    string? DispatchItemId = null);
 
 public sealed record CollectRaceResultsHistoryResult(
     int FixturesFound,

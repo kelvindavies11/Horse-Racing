@@ -33,7 +33,8 @@ public sealed class CollectRawSourceHandler(
                 command.SourceName,
                 command.SourceUri,
                 command.CollectorVersion,
-                startedAtUtc),
+                startedAtUtc,
+                command.DispatchItemId),
             command.MinimumRequestInterval,
             cancellationToken);
 

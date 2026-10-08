@@ -5,7 +5,8 @@ public sealed record CollectRawSourceCommand(
     string SourceName,
     Uri SourceUri,
     string CollectorVersion,
-    TimeSpan MinimumRequestInterval);
+    TimeSpan MinimumRequestInterval,
+    string? DispatchItemId = null);
 
 public sealed record RawCollectionStart(
     Guid RunId,
@@ -13,7 +14,8 @@ public sealed record RawCollectionStart(
     string SourceName,
     Uri SourceUri,
     string CollectorVersion,
-    DateTimeOffset StartedAtUtc);
+    DateTimeOffset StartedAtUtc,
+    string? DispatchItemId = null);
 
 public sealed record RawSourceResponse(
     Uri EffectiveUri,

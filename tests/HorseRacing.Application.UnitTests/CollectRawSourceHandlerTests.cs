@@ -34,6 +34,7 @@ public sealed class CollectRawSourceHandlerTests
         Assert.Null(result.ErrorCode);
         var start = Assert.Single(repository.Starts);
         Assert.Equal(SourceUri, start.SourceUri);
+        Assert.Equal("year-2026:2026-01", start.DispatchItemId);
         var finish = Assert.Single(repository.Finishes);
         Assert.Equal(RawCollectionOutcome.Succeeded, finish.Completion.Outcome);
         Assert.Null(finish.Completion.ErrorCode);
@@ -125,7 +126,13 @@ public sealed class CollectRawSourceHandlerTests
         new(sourceClient, repository, new FixedTimeProvider());
 
     private static CollectRawSourceCommand CreateCommand() =>
-        new("test-job", "BHA racecourses page", SourceUri, "test", TimeSpan.Zero);
+        new(
+            "test-job",
+            "BHA racecourses page",
+            SourceUri,
+            "test",
+            TimeSpan.Zero,
+            DispatchItemId: "year-2026:2026-01");
 
     private sealed class StubSourceClient : IRawSourceClient
     {

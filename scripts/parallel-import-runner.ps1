@@ -41,7 +41,9 @@ function Invoke-ParallelRawBatch {
             '--from',
             $month.From,
             '--to',
-            $month.To)) {
+            $month.To,
+            '--dispatch-item',
+            ('year-{0}:{1}' -f $month.From.Substring(0, 4), $monthKey))) {
             $arguments.Add($argument)
         }
         if ($month.ReuseSuccessful) {
@@ -88,8 +90,11 @@ function Invoke-ParallelRawBatch {
             '  [{0}] Raw runner exited {1}; starting its serialized Curated drain.' -f
             $worker.Month.From.Substring(0, 7),
             $rawExitCode)
-        & dotnet run --no-build --project $CuratedProjectPath -- --drain
+        $curatedOutput = @(& dotnet run --no-build --project $CuratedProjectPath -- --drain 2>&1)
         $curatedExitCode = $LASTEXITCODE
+        foreach ($line in $curatedOutput) {
+            Write-Host ('  [{0} curated] {1}' -f $worker.Month.From.Substring(0, 7), $line)
+        }
 
         $results.Add([pscustomobject]@{
             Month = $worker.Month
