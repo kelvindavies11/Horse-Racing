@@ -95,8 +95,9 @@ function Test-BhaApiReady([string] $Token) {
         return $probe.StatusCode -eq 200
     }
     catch {
-        $statusCode = if ($_.Exception.Response) {
-            [int] $_.Exception.Response.StatusCode
+        $responseProperty = $_.Exception.PSObject.Properties['Response']
+        $statusCode = if ($null -ne $responseProperty -and $null -ne $responseProperty.Value) {
+            [int] $responseProperty.Value.StatusCode
         }
         else {
             0
