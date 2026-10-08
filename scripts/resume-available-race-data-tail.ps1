@@ -68,20 +68,21 @@ function Get-PublicBhaToken {
 
 function Test-BhaApiReady([string] $Token) {
     $script:BhaProbeRetrySeconds = $ProbeIntervalMinutes * 60
-    $headers = @{
-        Authorization = "Bearer $Token"
-        Accept = 'application/json'
-        Origin = 'https://www.britishhorseracing.com'
-        Referer = $resultsPageUri.AbsoluteUri
-    }
+    $client = [System.Net.Http.HttpClient]::new()
+    $client.Timeout = [TimeSpan]::FromSeconds(30)
+    $client.DefaultRequestHeaders.Authorization =
+        [System.Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', $Token)
+    $client.DefaultRequestHeaders.Accept.ParseAdd('application/json')
+    [void] $client.DefaultRequestHeaders.TryAddWithoutValidation(
+        'Origin',
+        'https://www.britishhorseracing.com')
+    $client.DefaultRequestHeaders.Referrer = $resultsPageUri
+    $probe = $null
+    $statusCode = 0
 
     try {
-        $probe = Invoke-WebRequest `
-            -UseBasicParsing `
-            -SkipHttpErrorCheck `
-            -Uri $apiProbeUri `
-            -Headers $headers `
-            -TimeoutSec 30
+        $probe = $client.GetAsync($apiProbeUri).GetAwaiter().GetResult()
+        $statusCode = [int] $probe.StatusCode
     }
     catch {
         $script:BhaProbeRetrySeconds = 60
@@ -90,8 +91,13 @@ function Test-BhaApiReady([string] $Token) {
             [datetime]::UtcNow)
         return $false
     }
+    finally {
+        if ($null -ne $probe) {
+            $probe.Dispose()
+        }
+        $client.Dispose()
+    }
 
-    $statusCode = [int] $probe.StatusCode
     if ($statusCode -eq 200) {
         return $true
     }
