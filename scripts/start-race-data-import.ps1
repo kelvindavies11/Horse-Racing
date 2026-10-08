@@ -93,7 +93,7 @@ $arguments = @(
     '-ProbeIntervalMinutes',
     '15',
     '-RequestDelayMilliseconds',
-    '1000'
+    '5000'
 )
 
 $process = Start-Process `

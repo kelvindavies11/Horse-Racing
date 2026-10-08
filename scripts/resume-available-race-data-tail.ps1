@@ -12,7 +12,7 @@ param(
     [int] $ProbeIntervalMinutes = 15,
 
     [ValidateRange(1000, 10000)]
-    [int] $RequestDelayMilliseconds = 1000
+    [int] $RequestDelayMilliseconds = 5000
 )
 
 Set-StrictMode -Version Latest
@@ -29,10 +29,13 @@ else {
 }
 $progressPath = Join-Path $statePath 'progress.csv'
 $culture = [System.Globalization.CultureInfo]::InvariantCulture
+$firstMonth = [datetime]::ParseExact($StartMonth, 'yyyy-MM', $culture)
 $resultsPageUri = [uri]'https://www.britishhorseracing.com/racing/results/'
 $apiProbeUri = [uri](
     'https://api09.horseracing.software/bha/v1/fixtures/' +
-    '?resultsAvailable=1&fields=fixtureId&page=1&per_page=1')
+    ('?resultsAvailable=1&fields=fixtureId&year={0}&month={1}&page=1&per_page=1' -f
+        $firstMonth.Year,
+        $firstMonth.Month))
 $script:BhaProbeRetrySeconds = $ProbeIntervalMinutes * 60
 $env:RaceDataSync__DelayBetweenRequestsMilliseconds =
     $RequestDelayMilliseconds.ToString($culture)
@@ -73,6 +76,8 @@ function Test-BhaApiReady([string] $Token) {
     $client.DefaultRequestHeaders.Authorization =
         [System.Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', $Token)
     $client.DefaultRequestHeaders.Accept.ParseAdd('application/json')
+    $client.DefaultRequestHeaders.UserAgent.ParseAdd(
+        'HorseRacingLocalCollector/2.0 (+https://github.com/kelvindavies11/Horse-Racing)')
     [void] $client.DefaultRequestHeaders.TryAddWithoutValidation(
         'Origin',
         'https://www.britishhorseracing.com')

@@ -45,10 +45,10 @@ The reviewed Admin import plans expose a clean 2026 pass plus separate, manually
   -StartMonth 2026-01 `
   -EndMonth 2026-12 `
   -StateDirectory artifacts/2026-results-sync `
-  -RequestDelayMilliseconds 1000
+  -RequestDelayMilliseconds 5000
 ```
 
-The resume process refreshes and validates the public BHA results-client token using the official-site workflow, waits through `418`/`429` throttling, and refuses to run alongside another Raw, Curated or resume process. The runner bounds the current month at today's Europe/London date, reruns that month when a later day becomes available, and only records a final month when its calendar end has been reached. Successful source payloads are reused by exact job name and source URL when retrying the same range. On completion it performs the idempotent participant backfill used by Explore.
+The resume process refreshes the public BHA results-client token using the official-site workflow, validates it against a bounded fixture month, waits through `418`/`429` throttling, and refuses to run alongside another Raw, Curated or resume process. The unattended runners use a conservative five-second request cadence. The runner bounds the current month at today's Europe/London date, reruns that month when a later day becomes available, and only records a final month when its calendar end has been reached. Successful source payloads are reused by exact job name and source URL when retrying the same range. On completion it performs the idempotent participant backfill used by Explore.
 
 The completed-year phases use `resume-monthly-race-data-history.ps1` with isolated state directories such as `artifacts/2024-results-sync`. They are defined in Import Control but are never launched automatically; use the web application's two-step start control when the single-runner slot is free.
 
