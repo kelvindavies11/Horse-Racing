@@ -15,7 +15,7 @@ public sealed class BhaResultsPayloadInterpreter : IRaceResultsPayloadInterprete
 
     public Uri CreateFixturePageUri(int year, int month, int page) =>
         new($"{BaseUri}/fixtures/?resultsAvailable=1&fields={FixtureFields}" +
-            $"&year={year:D4}&month={month:D2}&page={page}&per_page=100");
+            $"&year={year:D4}&month={month:D2}&page={page}&per_page=250");
 
     public Uri CreateFixtureRacesUri(ResultFixtureReference fixture) =>
         new($"{BaseUri}/fixtures/{fixture.FixtureYear:D4}/{fixture.FixtureId}/races");

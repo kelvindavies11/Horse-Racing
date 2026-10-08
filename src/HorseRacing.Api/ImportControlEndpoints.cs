@@ -72,7 +72,7 @@ public static class ImportControlEndpoints
 
 public sealed class ImportControlService
 {
-    private const int MaximumRawWorkers = 5;
+    private const int DefaultMaximumRawWorkers = 2;
     private static readonly Regex MonthArgumentPattern = new(
         @"--from\s+(?<month>\d{4}-\d{2})-\d{2}",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
@@ -94,6 +94,7 @@ public sealed class ImportControlService
     private static readonly ImportPhaseDefinition[] Definitions =
     [
         CreateYearPhase(2026, "A clean Raw-to-Curated pass for 2026, refreshed as new results become available."),
+        CreateYearPhase(2025, "Queued to begin automatically after the current 2026 pass reaches today's available results."),
         CreateYearPhase(2024),
         CreateYearPhase(2023),
         CreateYearPhase(2022),
@@ -140,6 +141,7 @@ public sealed class ImportControlService
                 group => group.Min(item => item.Process.StartedAtUtc),
                 StringComparer.Ordinal);
         var activeMonth = activeMonths.Keys.OrderBy(month => month, StringComparer.Ordinal).FirstOrDefault();
+        var maximumRawWorkers = Math.Max(DefaultMaximumRawWorkers, activeRawProcesses.Length);
         var activeStartedAtUtc = observedProcesses.Count == 0
             ? (DateTimeOffset?)null
             : observedProcesses.Min(process => process.StartedAtUtc);
@@ -178,7 +180,7 @@ public sealed class ImportControlService
             else if (isRunning)
             {
                 canStart = false;
-                blocker = "Another import phase owns the five-runner pool.";
+                blocker = "Another import phase owns the protected runner pool.";
             }
 
             var status = activePhaseId == definition.Id
@@ -217,7 +219,7 @@ public sealed class ImportControlService
             activeStartedAtUtc,
             observedProcesses.Count,
             activeRawProcesses.Length,
-            MaximumRawWorkers,
+            maximumRawWorkers,
             jobs.Length,
             jobs.Count(job => job.Status == "Succeeded"),
             jobs.Count(job => job.Status == "Failed"),
@@ -296,7 +298,7 @@ public sealed class ImportControlService
                 "Started import phase {PhaseId} in process {ProcessId}.",
                 phaseId,
                 processId);
-            return new(true, $"{definition.Name} was placed in the five-runner pool.", processId);
+            return new(true, $"{definition.Name} was placed in the protected runner pool.", processId);
         }
         finally
         {
@@ -304,13 +306,14 @@ public sealed class ImportControlService
         }
     }
 
-    private async Task<IReadOnlyDictionary<string, ImportRunnerAuditCounts>> GetAuditCountsAsync(
+    private async Task<IReadOnlyDictionary<string, ImportRunnerAuditSummary>> GetAuditCountsAsync(
         CancellationToken cancellationToken)
     {
         const string sql = """
             WITH mapped_raw AS (
                 SELECT
                     collection_run.id,
+                    collection_run.job_name,
                     collection_run.outcome,
                     COALESCE(
                         collection_run.dispatch_item_id,
@@ -354,7 +357,8 @@ public sealed class ImportControlService
                     count(*) FILTER (WHERE outcome = 'Running')::integer AS running,
                     count(*) FILTER (WHERE outcome = 'Succeeded')::integer AS succeeded,
                     count(*) FILTER (WHERE outcome = 'Failed')::integer AS failed,
-                    count(*) FILTER (WHERE outcome = 'Cancelled')::integer AS cancelled
+                    count(*) FILTER (WHERE outcome = 'Cancelled')::integer AS cancelled,
+                    count(DISTINCT job_name) FILTER (WHERE outcome = 'Succeeded')::integer AS covered_requests
                 FROM mapped_raw
                 WHERE dispatch_item_id IS NOT NULL
                 GROUP BY dispatch_item_id
@@ -372,23 +376,61 @@ public sealed class ImportControlService
                 INNER JOIN mapped_raw ON mapped_raw.id = promotion.raw_collection_run_id
                 WHERE mapped_raw.dispatch_item_id IS NOT NULL
                 GROUP BY mapped_raw.dispatch_item_id
+            ),
+            meeting_estimates AS (
+                SELECT
+                    'year-' || left(meeting.source_key, 4) || ':' ||
+                        left(meeting.source_data #>> '{{foundData,fixtureDate}}', 7) AS dispatch_item_id,
+                    count(*)::integer AS meeting_count,
+                    coalesce(sum(
+                        CASE
+                            WHEN meeting.source_data #>> '{{foundData,numberOfRaces}}' ~ '^[0-9]+$'
+                                THEN (meeting.source_data #>> '{{foundData,numberOfRaces}}')::integer
+                            ELSE 0
+                        END), 0)::integer AS race_count
+                FROM curated.domain_objects AS meeting
+                WHERE meeting.source_system = 'BHA'
+                    AND meeting.domain_object_type = 'Meeting'
+                    AND meeting.source_data #>> '{{foundData,fixtureDate}}' ~ '^[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}$'
+                GROUP BY
+                    left(meeting.source_key, 4),
+                    left(meeting.source_data #>> '{{foundData,fixtureDate}}', 7)
+            ),
+            request_estimates AS (
+                SELECT
+                    dispatch_item_id,
+                    (meeting_count + race_count + ceiling(meeting_count / 250.0))::integer AS estimated_requests
+                FROM meeting_estimates
+            ),
+            dispatch_ids AS (
+                SELECT dispatch_item_id FROM raw_counts
+                UNION
+                SELECT dispatch_item_id FROM curated_counts
+                UNION
+                SELECT dispatch_item_id FROM request_estimates
             )
             SELECT
-                COALESCE(raw_counts.dispatch_item_id, curated_counts.dispatch_item_id) AS "DispatchItemId",
+                dispatch_ids.dispatch_item_id AS "DispatchItemId",
                 COALESCE(raw_counts.total, 0) AS "RawTotal",
                 COALESCE(raw_counts.running, 0) AS "RawRunning",
                 COALESCE(raw_counts.succeeded, 0) AS "RawSucceeded",
                 COALESCE(raw_counts.failed, 0) AS "RawFailed",
                 COALESCE(raw_counts.cancelled, 0) AS "RawCancelled",
+                COALESCE(raw_counts.covered_requests, 0) AS "CoveredRequests",
+                COALESCE(request_estimates.estimated_requests, raw_counts.covered_requests, 0) AS "EstimatedRequests",
                 COALESCE(curated_counts.total, 0) AS "CuratedTotal",
                 COALESCE(curated_counts.running, 0) AS "CuratedRunning",
                 COALESCE(curated_counts.succeeded, 0) AS "CuratedSucceeded",
                 COALESCE(curated_counts.skipped, 0) AS "CuratedSkipped",
                 COALESCE(curated_counts.failed, 0) AS "CuratedFailed",
                 COALESCE(curated_counts.cancelled, 0) AS "CuratedCancelled"
-            FROM raw_counts
-            FULL OUTER JOIN curated_counts
-                ON curated_counts.dispatch_item_id = raw_counts.dispatch_item_id
+            FROM dispatch_ids
+            LEFT JOIN raw_counts
+                ON raw_counts.dispatch_item_id = dispatch_ids.dispatch_item_id
+            LEFT JOIN curated_counts
+                ON curated_counts.dispatch_item_id = dispatch_ids.dispatch_item_id
+            LEFT JOIN request_estimates
+                ON request_estimates.dispatch_item_id = dispatch_ids.dispatch_item_id
             """;
 
         var rows = await dbContext.Database
@@ -397,21 +439,31 @@ public sealed class ImportControlService
 
         return rows.ToDictionary(
             row => row.DispatchItemId,
-            row => new ImportRunnerAuditCounts(
-                new ImportAuditOutcomeCounts(
-                    row.RawTotal,
-                    row.RawRunning,
-                    row.RawSucceeded,
-                    0,
-                    row.RawFailed,
-                    row.RawCancelled),
-                new ImportAuditOutcomeCounts(
-                    row.CuratedTotal,
-                    row.CuratedRunning,
-                    row.CuratedSucceeded,
-                    row.CuratedSkipped,
-                    row.CuratedFailed,
-                    row.CuratedCancelled)),
+            row => new ImportRunnerAuditSummary(
+                new ImportRunnerAuditCounts(
+                    new ImportAuditOutcomeCounts(
+                        row.RawTotal,
+                        row.RawRunning,
+                        row.RawSucceeded,
+                        0,
+                        row.RawFailed,
+                        row.RawCancelled),
+                    new ImportAuditOutcomeCounts(
+                        row.CuratedTotal,
+                        row.CuratedRunning,
+                        row.CuratedSucceeded,
+                        row.CuratedSkipped,
+                        row.CuratedFailed,
+                        row.CuratedCancelled)),
+                new ImportRequestProgress(
+                    row.CoveredRequests,
+                    Math.Max(row.CoveredRequests, row.EstimatedRequests),
+                    row.EstimatedRequests <= 0
+                        ? 0
+                        : Math.Clamp(
+                            (int)Math.Round(row.CoveredRequests * 100d / row.EstimatedRequests),
+                            0,
+                            100))),
             StringComparer.Ordinal);
     }
 
@@ -558,7 +610,7 @@ public sealed class ImportControlService
     private static IEnumerable<ImportMonthJob> BuildJobs(
         ImportPhaseDefinition definition,
         IReadOnlyList<ImportProgressRow> rows,
-        IReadOnlyDictionary<string, ImportRunnerAuditCounts> auditCounts,
+        IReadOnlyDictionary<string, ImportRunnerAuditSummary> auditCounts,
         string? activePhaseId,
         IReadOnlyDictionary<string, DateTimeOffset> activeMonths,
         bool isImportRunning,
@@ -590,6 +642,7 @@ public sealed class ImportControlService
                     : string.Equals(latest.Status, "Succeeded", StringComparison.OrdinalIgnoreCase)
                         ? "Succeeded"
                         : "Failed";
+            var auditSummary = auditCounts.GetValueOrDefault(jobId) ?? ImportRunnerAuditSummary.Empty;
 
             yield return new(
                 jobId,
@@ -603,7 +656,8 @@ public sealed class ImportControlService
                 isActive ? monthStartedAtUtc : null,
                 latest?.CompletedAtUtc,
                 latest?.ExitCode,
-                auditCounts.GetValueOrDefault(jobId) ?? ImportRunnerAuditCounts.Empty);
+                auditSummary.Counts,
+                auditSummary.RequestProgress);
         }
     }
 
@@ -827,12 +881,23 @@ public sealed class ImportControlService
         public int RawSucceeded { get; init; }
         public int RawFailed { get; init; }
         public int RawCancelled { get; init; }
+        public int CoveredRequests { get; init; }
+        public int EstimatedRequests { get; init; }
         public int CuratedTotal { get; init; }
         public int CuratedRunning { get; init; }
         public int CuratedSucceeded { get; init; }
         public int CuratedSkipped { get; init; }
         public int CuratedFailed { get; init; }
         public int CuratedCancelled { get; init; }
+    }
+
+    private sealed record ImportRunnerAuditSummary(
+        ImportRunnerAuditCounts Counts,
+        ImportRequestProgress RequestProgress)
+    {
+        public static ImportRunnerAuditSummary Empty { get; } = new(
+            ImportRunnerAuditCounts.Empty,
+            ImportRequestProgress.Empty);
     }
 }
 
@@ -883,7 +948,16 @@ public sealed record ImportMonthJob(
     DateTimeOffset? StartedAtUtc,
     DateTimeOffset? CompletedAtUtc,
     int? ExitCode,
-    ImportRunnerAuditCounts AuditCounts);
+    ImportRunnerAuditCounts AuditCounts,
+    ImportRequestProgress RequestProgress);
+
+public sealed record ImportRequestProgress(
+    int CoveredRequests,
+    int EstimatedRequests,
+    int Percent)
+{
+    public static ImportRequestProgress Empty { get; } = new(0, 0, 0);
+}
 
 public sealed record ImportRunnerAuditCounts(
     ImportAuditOutcomeCounts Raw,

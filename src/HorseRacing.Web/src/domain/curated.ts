@@ -230,6 +230,13 @@ export interface ImportMonthJob {
   completedAtUtc?: string | null;
   exitCode?: number | null;
   auditCounts: ImportRunnerAuditCounts;
+  requestProgress: ImportRequestProgress;
+}
+
+export interface ImportRequestProgress {
+  coveredRequests: number;
+  estimatedRequests: number;
+  percent: number;
 }
 
 export interface ImportAuditOutcomeCounts {

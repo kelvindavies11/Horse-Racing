@@ -224,11 +224,11 @@ const imports: ImportControlSnapshot = {
   activeStartedAtUtc: "2026-10-07T17:30:00Z",
   activeProcessCount: 2,
   activeWorkerCount: 0,
-  maximumWorkerCount: 5,
-  totalMonths: 72,
+  maximumWorkerCount: 2,
+  totalMonths: 84,
   succeededMonths: 0,
   failedMonths: 0,
-  queuedMonths: 71,
+  queuedMonths: 83,
   phases: [{
     id: "year-2026",
     name: "2026 results",
@@ -242,8 +242,8 @@ const imports: ImportControlSnapshot = {
     runningMonths: 0,
     status: "Waiting",
     canStart: false,
-    startBlocker: "Another import phase owns the five-runner pool.",
-  }, ...[2024, 2023, 2022, 2021, 2020].map((year) => ({
+    startBlocker: "Another import phase owns the protected runner pool.",
+  }, ...[2025, 2024, 2023, 2022, 2021, 2020].map((year) => ({
     id: `year-${year}`,
     name: `${year} results`,
     description: `A restartable Raw-to-Curated archive pass for ${year}.`,
@@ -256,7 +256,7 @@ const imports: ImportControlSnapshot = {
     runningMonths: 0,
     status: "Queued",
     canStart: false,
-    startBlocker: "Another import phase owns the five-runner pool.",
+    startBlocker: "Another import phase owns the protected runner pool.",
   }))],
   jobs: [{
     id: "year-2026:2026-01",
@@ -272,6 +272,7 @@ const imports: ImportControlSnapshot = {
       raw: { total: 24, running: 1, succeeded: 21, skipped: 0, failed: 2, cancelled: 0 },
       curated: { total: 18, running: 0, succeeded: 15, skipped: 2, failed: 1, cancelled: 0 },
     },
+    requestProgress: { coveredRequests: 174, estimatedRequests: 958, percent: 18 },
   }],
 };
 
@@ -412,6 +413,7 @@ describe("curated data workspace", () => {
     await user.click(screen.getByRole("button", { name: /Import control/i }));
 
     expect(await screen.findByRole("heading", { level: 2, name: "2026 results" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 3, name: "2025 results" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 3, name: "2024 results" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 3, name: "2020 results" })).toBeInTheDocument();
     expect(screen.getByRole("table", { name: "Monthly import queue" })).toBeInTheDocument();
@@ -420,6 +422,7 @@ describe("curated data workspace", () => {
     expect(screen.getByText("Next retry")).toBeInTheDocument();
     expect(screen.getByText("Protected processes")).toBeInTheDocument();
     expect(screen.getByLabelText("Raw audit: 24 total, 21 succeeded, 2 failed, 1 running, 0 cancelled")).toBeInTheDocument();
+    expect(screen.getByLabelText("BHA request coverage: 174 of approximately 958 source responses, 18 percent")).toBeInTheDocument();
     expect(screen.getByLabelText("Curated audit: 18 total, 15 succeeded, 1 failed, 0 running, 0 cancelled, 2 skipped")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Start phase" }).every((button) => button.hasAttribute("disabled"))).toBe(true);
   });

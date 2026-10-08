@@ -8,6 +8,26 @@ function ConvertTo-ProcessArgument([string] $Value) {
     return '"' + $Value.Replace('"', '\"') + '"'
 }
 
+function Invoke-SerializedCuratedDrain {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string] $CuratedProjectPath,
+
+        [Parameter(Mandatory)]
+        [string] $Reason
+    )
+
+    Write-Host ('  Starting serialized Curated drain ({0}).' -f $Reason)
+    $curatedOutput = @(& dotnet run --no-build --project $CuratedProjectPath -- --drain 2>&1)
+    $curatedExitCode = $LASTEXITCODE
+    foreach ($line in $curatedOutput) {
+        Write-Host ('  [curated] {0}' -f $line)
+    }
+
+    return $curatedExitCode
+}
+
 function Invoke-ParallelRawBatch {
     [CmdletBinding()]
     param(
@@ -21,7 +41,10 @@ function Invoke-ParallelRawBatch {
         [string] $CuratedProjectPath,
 
         [Parameter(Mandatory)]
-        [string] $StatePath
+        [string] $StatePath,
+
+        [ValidateRange(1, 60)]
+        [int] $CuratedDrainIntervalMinutes = 8
     )
 
     $workers = [System.Collections.Generic.List[object]]::new()
@@ -71,38 +94,79 @@ function Invoke-ParallelRawBatch {
         })
     }
 
-    $results = [System.Collections.Generic.List[object]]::new()
+    $pendingWorkers = [System.Collections.Generic.List[object]]::new()
     foreach ($worker in $workers) {
-        $worker.Process.WaitForExit()
-        $rawExitCode = $worker.Process.ExitCode
-        if (Test-Path -LiteralPath $worker.StandardOutputPath) {
-            Get-Content -LiteralPath $worker.StandardOutputPath | ForEach-Object {
-                Write-Host ('  [{0}] {1}' -f $worker.Month.From.Substring(0, 7), $_)
-            }
-        }
-        if (Test-Path -LiteralPath $worker.StandardErrorPath) {
-            Get-Content -LiteralPath $worker.StandardErrorPath | ForEach-Object {
-                Write-Warning ('[{0}] {1}' -f $worker.Month.From.Substring(0, 7), $_)
-            }
-        }
-
-        Write-Host (
-            '  [{0}] Raw runner exited {1}; starting its serialized Curated drain.' -f
-            $worker.Month.From.Substring(0, 7),
-            $rawExitCode)
-        $curatedOutput = @(& dotnet run --no-build --project $CuratedProjectPath -- --drain 2>&1)
-        $curatedExitCode = $LASTEXITCODE
-        foreach ($line in $curatedOutput) {
-            Write-Host ('  [{0} curated] {1}' -f $worker.Month.From.Substring(0, 7), $line)
-        }
-
-        $results.Add([pscustomobject]@{
-            Month = $worker.Month
-            RawExitCode = $rawExitCode
-            CuratedExitCode = $curatedExitCode
-        })
-        $worker.Process.Dispose()
+        $pendingWorkers.Add($worker)
     }
 
-    return $results.ToArray()
+    $rawResults = [System.Collections.Generic.List[object]]::new()
+    $curatedExitCode = 0
+    $nextCuratedDrainAt = [datetime]::UtcNow.AddMinutes($CuratedDrainIntervalMinutes)
+    while ($pendingWorkers.Count -gt 0) {
+        $completedWorkers = [System.Collections.Generic.List[object]]::new()
+        foreach ($worker in $pendingWorkers.ToArray()) {
+            if (-not $worker.Process.HasExited) {
+                continue
+            }
+
+            $rawExitCode = $worker.Process.ExitCode
+            if (Test-Path -LiteralPath $worker.StandardOutputPath) {
+                Get-Content -LiteralPath $worker.StandardOutputPath | ForEach-Object {
+                    Write-Host ('  [{0}] {1}' -f $worker.Month.From.Substring(0, 7), $_)
+                }
+            }
+            if (Test-Path -LiteralPath $worker.StandardErrorPath) {
+                Get-Content -LiteralPath $worker.StandardErrorPath | ForEach-Object {
+                    Write-Warning ('[{0}] {1}' -f $worker.Month.From.Substring(0, 7), $_)
+                }
+            }
+
+            Write-Host (
+                '  [{0}] Raw runner exited {1}.' -f
+                $worker.Month.From.Substring(0, 7),
+                $rawExitCode)
+            $rawResults.Add([pscustomobject]@{
+                Month = $worker.Month
+                RawExitCode = $rawExitCode
+            })
+            $completedWorkers.Add($worker)
+        }
+
+        foreach ($worker in $completedWorkers) {
+            [void] $pendingWorkers.Remove($worker)
+            $worker.Process.Dispose()
+        }
+
+        $drainReason = if ($completedWorkers.Count -gt 0) {
+            '{0} Raw {1} completed' -f
+                $completedWorkers.Count,
+                $(if ($completedWorkers.Count -eq 1) { 'runner' } else { 'runners' })
+        }
+        elseif ([datetime]::UtcNow -ge $nextCuratedDrainAt) {
+            'periodic live-data checkpoint'
+        }
+        else {
+            $null
+        }
+
+        if ($null -ne $drainReason) {
+            $drainExitCode = Invoke-SerializedCuratedDrain `
+                -CuratedProjectPath $CuratedProjectPath `
+                -Reason $drainReason
+            $curatedExitCode = $drainExitCode
+            $nextCuratedDrainAt = [datetime]::UtcNow.AddMinutes($CuratedDrainIntervalMinutes)
+        }
+
+        if ($pendingWorkers.Count -gt 0) {
+            Start-Sleep -Seconds 2
+        }
+    }
+
+    return @($rawResults | ForEach-Object {
+        [pscustomobject]@{
+            Month = $_.Month
+            RawExitCode = $_.RawExitCode
+            CuratedExitCode = $curatedExitCode
+        }
+    })
 }

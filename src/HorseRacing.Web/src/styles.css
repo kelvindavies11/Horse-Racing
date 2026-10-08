@@ -380,7 +380,7 @@ svg { width: 1.15rem; height: 1.15rem; flex: 0 0 auto; }
 .queue-filters label span { color: var(--muted); font: 600 .49rem var(--mono); letter-spacing: .08em; text-transform: uppercase; }
 .queue-filters select { margin: 3px -4px 0; border: 0; outline: 0; background: transparent; font-size: .65rem; font-weight: 700; }
 .import-table { overflow-x: auto; border: 1px solid var(--ink); background: var(--cream); }
-.import-row { display: grid; min-width: 1430px; grid-template-columns: 190px minmax(180px, 1.4fr) 125px 190px 210px 80px 145px 145px 60px; border-bottom: 1px solid var(--line); }
+.import-row { display: grid; min-width: 1470px; grid-template-columns: 190px minmax(180px, 1.4fr) 125px 230px 210px 80px 145px 145px 60px; border-bottom: 1px solid var(--line); }
 .import-row:last-child { border-bottom: 0; }
 .import-row > span { display: flex; min-width: 0; flex-direction: column; justify-content: center; min-height: 61px; padding: 11px 12px; overflow-wrap: anywhere; border-right: 1px solid var(--line); font-size: .66rem; }
 .import-row > span:last-child { border-right: 0; }
@@ -400,6 +400,12 @@ svg { width: 1.15rem; height: 1.15rem; flex: 0 0 auto; }
 .import-audit-count--running { color: #2949aa; background: #e2e9ff; }
 .import-audit-count--skipped { color: #755d11; background: #fff2bf; }
 .import-audit-count--cancelled { color: #606663; background: #eceeeb; }
+.import-request-progress { display: grid; width: 100%; grid-template-columns: 1fr auto; gap: 4px 8px; padding-top: 7px; border-top: 1px solid var(--line); }
+.import-request-progress > span { color: #555d58; font: 600 .49rem var(--mono); }
+.import-request-progress > span strong { color: var(--forest-deep); font-size: .58rem; }
+.import-request-progress > b { grid-column: 1 / -1; height: 5px; overflow: hidden; background: #d8d9d1; }
+.import-request-progress > b i { display: block; width: var(--request-progress); height: 100%; background: linear-gradient(90deg, #4263eb, #38a169); transition: width .35s ease; }
+.import-request-progress > small { grid-column: 2; grid-row: 1; margin: 0 !important; color: #2949aa !important; font-weight: 750 !important; white-space: nowrap; }
 .queue-empty { display: flex; gap: 10px; align-items: center; justify-content: center; min-height: 160px; color: var(--muted); font-size: .75rem; }
 
 .results-heading { align-items: center; }

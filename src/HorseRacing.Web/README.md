@@ -32,7 +32,7 @@ This public URL is not a secret. Database credentials remain server-side.
 - **Explore** shows Curated record counts, type distribution, name/source-key search, type filtering, bounded pagination and a record drawer containing the found data, source location, observation timestamps and Raw/Curated lineage identifiers.
 - **Patterns** infers links where reference-like Curated fields such as `horseId`, `fixtureId`, `courseName` or `trainerId` match another record's source key or display name. It shows type-pair frequency and lets the user inspect connected entity hubs. These are inspection signals, not persisted or asserted domain relationships.
 - **Admin audit** shows aggregate and per-run information for Raw collection and Curated promotion jobs, including outcomes, timing, versions, HTTP/payload metadata, record counts and recorded errors. It is read-only.
-- **Import control** displays separate annual Raw-to-Curated plans for 2026 and the 2024–2020 archives. It refreshes every five seconds, shows the active runner and paginated/filterable queue, and offers a two-step start/resume control when the exclusive-runner guard allows it. There is deliberately no stop or arbitrary-command control.
+- **Import control** displays separate annual Raw-to-Curated plans for 2026 through 2020. It refreshes every five seconds, shows the active runners, per-month BHA request coverage and paginated/filterable queue, and offers a two-step start/resume control when the protected-runner guard allows it. The 2025 phase is queued for the automation to start after the current 2026 catch-up pass; there is deliberately no stop or arbitrary-command control.
 
 ## Read API
 
@@ -45,10 +45,10 @@ The typed repository consumes:
 | `GET /api/v1/curated/entities?type=&search=&page=&pageSize=` | Stable, bounded Curated record list with found data and lineage |
 | `GET /api/v1/curated/relationships?limit=` | Bounded inferred relationship graph and type-pair counts |
 | `GET /api/v1/admin/audit?limit=` | Raw collection and Curated promotion run ledger |
-| `GET /api/v1/admin/imports` | Fixed phase status, active process and 144-month queue snapshot |
+| `GET /api/v1/admin/imports` | Fixed phase status, active process and 84-month queue snapshot |
 | `POST /api/v1/admin/imports/{phaseId}/start` | Guarded start/resume for a fixed phase; loopback-only and confirmation-header protected |
 
-The frontend does not receive Raw payload bytes or the BHA bearer token. Import starts accept only the three reviewed phase identifiers, call the documented token-refreshing resume scripts at a fixed 5000 ms cadence, and refuse to start while any BHA importer is active. `pageSize` is constrained to 12–100 records, the relationship sample to 50–800 records and each audit list to 20–200 runs.
+The frontend does not receive Raw payload bytes or the BHA bearer token. Import starts accept only the seven reviewed annual phase identifiers, call the documented token-refreshing resume scripts at a fixed 5000 ms aggregate cadence, and refuse to start while any BHA importer is active. `pageSize` is constrained to 12–100 records, the relationship sample to 50–800 records and each audit list to 20–200 runs.
 
 ## Quality gates
 

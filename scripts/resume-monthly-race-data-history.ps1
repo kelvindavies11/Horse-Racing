@@ -18,7 +18,7 @@ param(
     [int] $RequestDelayMilliseconds = 5000,
 
     [ValidateRange(1, 5)]
-    [int] $MaxParallelism = 5
+    [int] $MaxParallelism = 2
 )
 
 Set-StrictMode -Version Latest
@@ -197,7 +197,7 @@ while ((Get-SucceededMonthCount) -lt $monthCount) {
     }
 
     Write-Output (
-        '{0:o} BHA API accepted the validation request; resuming with up to {1} Raw runners behind one shared {2} ms request gate, with one serialized Curated drain after each Raw runner.' -f
+        '{0:o} BHA API accepted the validation request; resuming with up to {1} Raw runners behind one shared {2} ms request gate, with periodic serialized Curated drains while Raw collection continues.' -f
         [datetime]::UtcNow,
         $MaxParallelism,
         $RequestDelayMilliseconds)

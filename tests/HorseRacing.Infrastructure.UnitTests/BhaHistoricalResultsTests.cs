@@ -63,6 +63,9 @@ public sealed class BhaHistoricalResultsTests
             """{"data":[{"yearOfRace":2026,"raceId":202,"divisionSequence":1,"raceName":"The Example Stakes"}]}"""));
 
         var race = Assert.Single(races);
+        Assert.Equal(
+            "https://api09.horseracing.software/bha/v1/fixtures/?resultsAvailable=1&fields=fixtureYear,fixtureId,courseId,courseName,fixtureDate,fixtureType,fixtureSession,firstRace,numberOfRaces,going,weather,racingTrackType,abandonedReasonCode,highlightTitle&year=2026&month=10&page=1&per_page=250",
+            interpreter.CreateFixturePageUri(2026, 10, 1).ToString());
         Assert.Equal("https://api09.horseracing.software/bha/v1/fixtures/2026/101/races", interpreter.CreateFixtureRacesUri(fixture).ToString());
         Assert.Equal("https://api09.horseracing.software/bha/v1/races/2026/202/1/results", interpreter.CreateRaceResultsUri(race).ToString());
         Assert.Equal("The Example Stakes", race.RaceName);

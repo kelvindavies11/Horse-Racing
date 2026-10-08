@@ -673,7 +673,7 @@ const ImportControlPage = ({
   return <div className="page-wrap imports-page">
     <section className="hero hero--imports">
       <div><p className="kicker">Operations / guarded controls</p><h1>The queue,<br /><em>in plain sight.</em></h1></div>
-      <div className="hero-copy"><p>Watch every monthly runner move from queued to complete, then resume an eligible phase without opening a terminal.</p><span><i />One guarded phase · up to five Raw runners · one Curated writer</span></div>
+      <div className="hero-copy"><p>Watch every monthly runner move from queued to complete, then resume an eligible phase without opening a terminal.</p><span><i />One guarded phase · concentrated Raw runners · one Curated writer</span></div>
     </section>
     {isLoading && <PageSkeleton />}
     {!isLoading && error && <ApiError message={error} onRetry={reload} />}
@@ -681,7 +681,7 @@ const ImportControlPage = ({
       <section className={`runner-console runner-console--${data.runnerState.toLowerCase()}`} aria-label="Current import runner">
         <div className="runner-pulse"><span /><i /><b /></div>
         <div className="runner-copy">
-          <p className="kicker">Protected five-runner pool</p>
+          <p className="kicker">Protected runner pool</p>
           <h2>{data.isImportRunning ? activePhase?.name ?? "Import detected" : "Ready for dispatch"}</h2>
           <p>{data.isImportRunning
             ? data.runnerMessage
@@ -733,12 +733,12 @@ const ImportControlPage = ({
           </div>
         </div>
         <div className="import-table" role="table" aria-label="Monthly import queue">
-          <div className="import-row import-row--head" role="row"><span>Runner</span><span>Phase</span><span>Status</span><span>Raw audit</span><span>Curated audit</span><span>Attempts</span><span>Started</span><span>Finished</span><span>Exit</span></div>
+          <div className="import-row import-row--head" role="row"><span>Runner</span><span>Phase</span><span>Status</span><span>Raw / download</span><span>Curated audit</span><span>Attempts</span><span>Started</span><span>Finished</span><span>Exit</span></div>
           {queuePages.pageItems.map((job) => <div className={`import-row import-row--${job.status.toLowerCase().replace(" ", "-")}`} role="row" key={job.id}>
             <span><strong>{calendarMonth.format(new Date(`${job.month}-01T00:00:00Z`))}</strong><small>{job.from} → {job.to}</small></span>
             <span>{job.phaseName}</span>
             <span><Outcome value={job.status} /></span>
-            <ImportAuditCell label="Raw" counts={job.auditCounts.raw} />
+            <ImportAuditCell label="Raw" counts={job.auditCounts.raw} requestProgress={job.requestProgress} />
             <ImportAuditCell label="Curated" counts={job.auditCounts.curated} showSkipped />
             <span>{number.format(job.attempts)}</span>
             <span>{job.startedAtUtc ? formatDateTime(job.startedAtUtc) : "—"}</span>
@@ -777,7 +777,7 @@ const ImportPhaseCard = ({
     <div className="phase-range"><span>{phase.startMonth}</span><i /><span>{phase.endMonth}</span></div>
     <div className="phase-progress"><span><i /></span><small>{phase.succeededMonths} / {phase.totalMonths} succeeded · {progress}%</small></div>
     <div className="phase-counts"><span><strong>{phase.failedMonths}</strong> retry</span><span><strong>{phase.queuedMonths}</strong> queued</span><span><strong>{phase.runningMonths}</strong> running</span></div>
-    {armed ? <div className="phase-confirm" role="group" aria-label={`Confirm ${phase.name}`}><p>This will claim the five-runner pool and refresh the public BHA token.</p><button type="button" onClick={onStart} disabled={starting}>{starting ? "Starting…" : "Confirm dispatch"}</button><button type="button" onClick={onCancel}>Cancel</button></div> : <button className="phase-start" type="button" onClick={onStart} disabled={!phase.canStart || starting}>{starting ? "Starting…" : phase.failedMonths > 0 ? "Resume & retry" : "Start phase"}<ArrowIcon /></button>}
+    {armed ? <div className="phase-confirm" role="group" aria-label={`Confirm ${phase.name}`}><p>This will claim the protected runner pool and refresh the public BHA token.</p><button type="button" onClick={onStart} disabled={starting}>{starting ? "Starting…" : "Confirm dispatch"}</button><button type="button" onClick={onCancel}>Cancel</button></div> : <button className="phase-start" type="button" onClick={onStart} disabled={!phase.canStart || starting}>{starting ? "Starting…" : phase.failedMonths > 0 ? "Resume & retry" : "Start phase"}<ArrowIcon /></button>}
     {!armed && phase.startBlocker && <small className="phase-blocker">{phase.startBlocker}</small>}
   </article>;
 };
@@ -786,10 +786,12 @@ const ImportAuditCell = ({
   label,
   counts,
   showSkipped = false,
+  requestProgress,
 }: {
   label: string;
   counts: ImportMonthJob["auditCounts"]["raw"];
   showSkipped?: boolean;
+  requestProgress?: ImportMonthJob["requestProgress"];
 }) => <span className="import-audit-cell" aria-label={`${label} audit: ${counts.total} total, ${counts.succeeded} succeeded, ${counts.failed} failed, ${counts.running} running, ${counts.cancelled} cancelled${showSkipped ? `, ${counts.skipped} skipped` : ""}`}>
   <span className="import-audit-total"><strong>{number.format(counts.total)}</strong><small>records</small></span>
   <span className="import-audit-counts">
@@ -799,6 +801,14 @@ const ImportAuditCell = ({
     {showSkipped && <i className="import-audit-count import-audit-count--skipped" title="Skipped">Skip {number.format(counts.skipped)}</i>}
     <i className="import-audit-count import-audit-count--cancelled" title="Cancelled">Stop {number.format(counts.cancelled)}</i>
   </span>
+  {requestProgress && requestProgress.estimatedRequests > 0 && <span
+    className="import-request-progress"
+    aria-label={`BHA request coverage: ${requestProgress.coveredRequests} of approximately ${requestProgress.estimatedRequests} source responses, ${requestProgress.percent} percent`}
+  >
+    <span><strong>{number.format(requestProgress.coveredRequests)}</strong> / ~{number.format(requestProgress.estimatedRequests)} sources</span>
+    <b><i style={{ "--request-progress": `${requestProgress.percent}%` } as CSSProperties} /></b>
+    <small>{requestProgress.percent}% downloaded</small>
+  </span>}
 </span>;
 
 const AdminPage = ({ data, error, isLoading, reload }: { data?: AuditSnapshot; error?: string; isLoading: boolean; reload: () => void }) => {

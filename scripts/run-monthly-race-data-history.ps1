@@ -21,7 +21,7 @@ param(
     [switch] $Force,
 
     [ValidateRange(1, 5)]
-    [int] $MaxParallelism = 5
+    [int] $MaxParallelism = 2
 )
 
 Set-StrictMode -Version Latest
@@ -138,7 +138,7 @@ foreach ($month in $months | Where-Object Index -ge $StartIndex) {
     }
 
     Write-Output (
-        '[{0}/{1}] {2} through {3}: restartable Raw collection, then Curated drain' -f
+        '[{0}/{1}] {2} through {3}: restartable Raw collection with periodic Curated checkpoints' -f
         $month.Index,
         $monthCount,
         $month.From,

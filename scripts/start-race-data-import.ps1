@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
-    [ValidateSet('year-2026', 'year-2024', 'year-2023', 'year-2022', 'year-2021', 'year-2020')]
+    [ValidateSet('year-2026', 'year-2025', 'year-2024', 'year-2023', 'year-2022', 'year-2021', 'year-2020')]
     [string] $PhaseId
 )
 
@@ -17,6 +17,12 @@ $phases = @{
         StartMonth = '2026-01'
         EndMonth = '2026-12'
         StateDirectory = 'artifacts/2026-results-sync'
+    }
+    'year-2025' = @{
+        Script = 'resume-monthly-race-data-history.ps1'
+        StartMonth = '2025-01'
+        EndMonth = '2025-12'
+        StateDirectory = 'artifacts/2025-results-sync'
     }
     'year-2024' = @{
         Script = 'resume-monthly-race-data-history.ps1'
@@ -95,7 +101,7 @@ $arguments = @(
     '-RequestDelayMilliseconds',
     '5000',
     '-MaxParallelism',
-    '5'
+    '2'
 )
 
 $process = Start-Process `

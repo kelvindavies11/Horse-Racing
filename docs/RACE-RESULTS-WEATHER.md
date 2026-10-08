@@ -25,7 +25,7 @@ dotnet run --project src/HorseRacing.RaceDataSync -- --from 2026-09-29 --to 2026
 Refresh the token by default before an unattended multi-month import and after a `401` or
 `403`. Never echo it, paste it into logs or chat, or store it in source-controlled files.
 
-The inclusive range is limited to 32 days. With no arguments, the job imports the seven most recently completed UTC dates. The default one-second BHA request interval plus bounded 429 retry/backoff is deliberate; do not lower it for unattended use. A missing upstream race result remains a failed Raw audit row and does not fabricate a result; a `404` result for a BHA placeholder race is counted as an audited unavailable result rather than making the entire historical month permanently fail.
+The inclusive range is limited to 32 days. With no arguments, the job imports the seven most recently completed UTC dates. The supervised archive uses one PostgreSQL-coordinated five-second BHA request gate plus bounded 429 retry/backoff; do not lower it for unattended use. A missing upstream race result remains a failed Raw audit row and does not fabricate a result; a `404` result for a BHA placeholder race is counted as an audited unavailable result rather than making the entire historical month permanently fail.
 
 The result flow is safe to rerun: Raw attempts remain immutable, promotion upserts by source identity while retaining observation history, and the location/weather rows are upserted by course identity and Curated race respectively.
 
@@ -34,11 +34,11 @@ The result flow is safe to rerun: Raw attempts remain immutable, promotion upser
 Use the restartable monthly runner for longer periods. The fast path deliberately separates each month into two visible process boundaries:
 
 1. `HorseRacing.RaceDataSync --mode raw --reuse-successful` captures only Raw payloads that have not already succeeded. If the BHA API throttles or the network fails, the raw pass stops promptly instead of continuing to issue doomed requests.
-2. `HorseRacing.Bha.CuratedPromoter --drain` runs immediately afterward and drains every pending Raw payload in batches until none remain.
+2. One coordinator runs `HorseRacing.Bha.CuratedPromoter --drain` every eight minutes while Raw collection continues and again whenever a monthly Raw runner completes. The serialized checkpoints make newly downloaded results visible without allowing Curated drains to overlap.
 
 The runner records one immutable status row per monthly attempt and skips months that have already succeeded. Weather is deferred from this fast Raw-to-Curated import path; run `RaceDataSync --mode weather` separately after the result archive is current.
 
-The reviewed Admin import plans expose a clean 2026 pass plus separate, manually started annual archive passes for 2024, 2023, 2022, 2021 and 2020. Because future 2026 results do not exist yet, that phase uses the date-aware available-results runner:
+The reviewed Admin import plans expose a clean 2026 pass plus annual archive passes for 2025 through 2020. The 2025 phase is queued to start automatically after the current 2026 pass reaches the latest available Europe/London date; the older archive phases remain manual. Because future 2026 results do not exist yet, that phase uses the date-aware available-results runner:
 
 ```powershell
 ./scripts/resume-available-race-data-tail.ps1 `
@@ -46,14 +46,14 @@ The reviewed Admin import plans expose a clean 2026 pass plus separate, manually
   -EndMonth 2026-12 `
   -StateDirectory artifacts/2026-results-sync `
   -RequestDelayMilliseconds 5000 `
-  -MaxParallelism 5
+  -MaxParallelism 2
 ```
 
 The resume process refreshes the public BHA results-client token using the official-site workflow, validates it against a bounded fixture month, waits through `418`/`429` throttling, and refuses to run alongside another Raw, Curated or resume process. The unattended runners use a conservative five-second request cadence. The runner bounds the current month at today's Europe/London date, reruns that month when a later day becomes available, and only records a final month when its calendar end has been reached. Successful source payloads are reused by exact job name and source URL when retrying the same range. On completion it performs the idempotent participant backfill used by Explore.
 
-The supervisor owns one phase at a time and can run as many as five monthly Raw workers. All workers share a PostgreSQL-coordinated request gate, so BHA calls remain at least five seconds apart across the whole pool. Completed months reuse successful payloads, which also prevents shared lookups from being downloaded once per worker; only a partial current month is refreshed as new results become available. A partial unique index prevents the same Raw job and source from running twice, while an orphaned five-minute-old claim is cancelled before retry. Every completed Raw runner triggers its own Curated drain through a single coordinator, so the drains never overlap; Curated payload claims are unique, stale claims are recovered, and Curated writes also use a database advisory lock.
+The supervisor owns one phase at a time and normally runs two monthly Raw workers. All workers share a PostgreSQL-coordinated request gate, so BHA calls remain at least five seconds apart across the whole pool. Two workers concentrate that fixed capacity so the first month becomes usable sooner; adding more workers does not increase the upstream request rate. Fixture discovery requests use pages of 250 records to avoid unnecessary page calls. Completed months reuse successful payloads, which also prevents shared lookups from being downloaded once per worker; only a partial current month is refreshed as new results become available. A partial unique index prevents the same Raw job and source from running twice, while an orphaned five-minute-old claim is cancelled before retry. The single coordinator runs periodic and completion Curated drains, so they never overlap; Curated payload claims are unique, stale claims are recovered, and Curated writes also use a database advisory lock.
 
-The completed-year phases use `resume-monthly-race-data-history.ps1` with isolated state directories such as `artifacts/2024-results-sync`. They are defined in Import Control but are never launched automatically; use the web application's two-step start control when the five-runner pool is free.
+The completed-year phases use `resume-monthly-race-data-history.ps1` with isolated state directories such as `artifacts/2025-results-sync`. Import Control shows request-level download coverage beside the Raw audit totals. The automation starts 2025 only after the current 2026 pass is caught up and the protected runner pool is free; use the web application's two-step control for 2024 through 2020.
 
 ## API and website
 
@@ -67,7 +67,7 @@ After upgrading an existing local database, materialize participant identities f
 
 The backfill is idempotent, preserves Raw payload and promotion lineage, and does not call or interrupt any Raw source job. Direct participant records are left unchanged; only result-derived records are refreshed.
 
-The website's **Results** workspace provides search, race selection, winner and race facts, course coordinates/postcode, weather, and the full finishing order. **Calendar** opens on the latest imported month, groups races by their BHA meeting identity, and provides one tab per race with runners, jockeys, trainers, owners, odds, status, course details and race-time weather. **Explore** shows each entity's direct and inbound curated links and lets the operator open a related race, meeting, runner, horse, jockey, trainer, owner, stable or racecourse record in place. **Admin audit** refreshes every five seconds and shows running state, start time, finish time and duration for Raw jobs and Curated promotions without exposing response bytes or credentials. **Import control** attributes every new audit run to its monthly dispatch item and shows separate Raw and Curated totals split by running, succeeded, skipped, failed and cancelled outcomes. A database backfill plus source-key inference supplies the same monthly breakdown for historical result imports where the month can be established from curated lineage.
+The website's **Results** workspace provides search, race selection, winner and race facts, course coordinates/postcode, weather, and the full finishing order. **Calendar** opens on the latest imported month, groups races by their BHA meeting identity, and provides one tab per race with runners, jockeys, trainers, owners, odds, status, course details and race-time weather. **Explore** shows each entity's direct and inbound curated links and lets the operator open a related race, meeting, runner, horse, jockey, trainer, owner, stable or racecourse record in place. **Admin audit** refreshes every five seconds and shows running state, start time, finish time and duration for Raw jobs and Curated promotions without exposing response bytes or credentials. **Import control** attributes every new audit run to its monthly dispatch item, estimates completed versus expected BHA source responses, and shows separate Raw and Curated totals split by running, succeeded, skipped, failed and cancelled outcomes. A database backfill plus source-key inference supplies the same monthly breakdown for historical result imports where the month can be established from curated lineage.
 
 ## Persisted enrichment
 
