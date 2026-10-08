@@ -85,6 +85,9 @@ public sealed class ImportControlService
     private static readonly Regex ShortRetryLogPattern = new(
         @"^(?<timestamp>\S+)\s+BHA API readiness probe returned (?<reason>.+); refreshing the public token and retrying in one minute\.$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+    private static readonly Regex BatchRetryLogPattern = new(
+        @"^(?<timestamp>\S+)\s+Available-results batch exited (?<exitCode>\d+); waiting (?<minutes>\d+) minutes before retrying only unfinished requests\.$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     private static readonly JsonSerializerOptions ProcessJsonOptions = new()
     {
@@ -540,6 +543,21 @@ public sealed class ImportControlService
                         "Waiting",
                         $"BHA readiness returned {shortRetry.Groups["reason"].Value}.",
                         retryAtUtc.AddMinutes(1));
+                }
+
+                var batchRetry = BatchRetryLogPattern.Match(line);
+                if (batchRetry.Success
+                    && TryReadLogTimestamp(batchRetry, out var batchFailedAtUtc)
+                    && int.TryParse(
+                        batchRetry.Groups["minutes"].Value,
+                        NumberStyles.None,
+                        CultureInfo.InvariantCulture,
+                        out var batchWaitMinutes))
+                {
+                    return new(
+                        "Waiting",
+                        "The last Raw batch had retryable failures. Successful responses are preserved.",
+                        batchFailedAtUtc.AddMinutes(batchWaitMinutes));
                 }
             }
         }

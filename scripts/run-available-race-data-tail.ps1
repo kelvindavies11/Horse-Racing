@@ -226,7 +226,7 @@ for ($batchStart = 0; $batchStart -lt $pendingMonths.Count; $batchStart += $MaxP
 }
 
 if ($failedRanges.Count -gt 0) {
-    Write-Error ('The following ranges need retrying: {0}' -f ($failedRanges -join ', '))
+    Write-Warning ('The following ranges need retrying: {0}' -f ($failedRanges -join ', '))
     exit 1
 }
 

@@ -177,14 +177,32 @@ Write-Output (
     $MaxParallelism,
     $RequestDelayMilliseconds)
 
-& $runnerPath `
-    -StartMonth $StartMonth `
-    -EndMonth $EndMonth `
-    -StateDirectory $statePath `
-    -MaxParallelism $MaxParallelism `
-    -SkipBuild
-if ($LASTEXITCODE -ne 0) {
-    throw "The available-results sync failed with exit code $LASTEXITCODE."
+while ($true) {
+    & $runnerPath `
+        -StartMonth $StartMonth `
+        -EndMonth $EndMonth `
+        -StateDirectory $statePath `
+        -MaxParallelism $MaxParallelism `
+        -SkipBuild
+    $runnerExitCode = $LASTEXITCODE
+    if ($runnerExitCode -eq 0) {
+        break
+    }
+
+    Write-Output (
+        '{0:o} Available-results batch exited {1}; waiting {2} minutes before retrying only unfinished requests.' -f
+        [datetime]::UtcNow,
+        $runnerExitCode,
+        $ProbeIntervalMinutes)
+    Start-Sleep -Seconds ($ProbeIntervalMinutes * 60)
+
+    $bhaToken = Get-PublicBhaToken
+    $env:BhaCollection__RacingStatusApiBearerToken = $bhaToken
+    while (-not (Test-BhaApiReady -Token $bhaToken)) {
+        Start-Sleep -Seconds $script:BhaProbeRetrySeconds
+        $bhaToken = Get-PublicBhaToken
+        $env:BhaCollection__RacingStatusApiBearerToken = $bhaToken
+    }
 }
 
 & $backfillPath

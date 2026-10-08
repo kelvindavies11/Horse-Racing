@@ -200,7 +200,7 @@ for ($batchStart = 0; $batchStart -lt $pendingMonths.Count; $batchStart += $MaxP
 }
 
 if ($failedMonths.Count -gt 0) {
-    Write-Error (
+    Write-Warning (
         'The following monthly runs need retrying: {0}' -f
         ($failedMonths -join ', '))
     exit 1
