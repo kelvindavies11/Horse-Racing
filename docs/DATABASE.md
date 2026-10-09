@@ -97,6 +97,10 @@ dotnet ef database update --project src/HorseRacing.Infrastructure --startup-pro
 
 The design-time factory reads `HORSE_RACING_CONNECTION_STRING`; the API reads `ConnectionStrings:HorseRacing` (environment override `ConnectionStrings__HorseRacing`). Set both consistently when using a database other than Compose. Using Infrastructure as the EF startup project directly loads its design-time factory.
 
+The database contents are not stored in Git. Install the nightly compressed backup,
+retention, and monthly test-restore schedule by following the
+[local database backup guide](DATABASE-BACKUPS.md).
+
 The schema was exercised on an isolated local PostgreSQL 16 instance; the Compose target remains PostgreSQL 17 and needs a separate compatibility run. [Project status](PROJECT-STATUS.md) contains detailed evidence. Repeat the row/relationship checks on a disposable migrated database with:
 
 ```powershell

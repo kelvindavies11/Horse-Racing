@@ -28,6 +28,12 @@ Thumbs.db
 ## Docker data
 .postgres-data/
 
+## Local database backups
+/backups/
+/database-backups/
+horse-racing-*.dump
+horse-racing-*.dump.partial
+
 ## Frontend build output
 node_modules/
 dist/
