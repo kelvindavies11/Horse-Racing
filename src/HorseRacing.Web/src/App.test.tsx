@@ -419,6 +419,7 @@ describe("curated data workspace", () => {
     expect(screen.getByRole("table", { name: "Monthly import queue" })).toBeInTheDocument();
     expect(screen.getByText("January 2026")).toBeInTheDocument();
     expect(screen.getByText(/BHA returned HTTP 418/)).toBeInTheDocument();
+    expect(screen.getByText(/Automatic retry scheduled for/)).toBeInTheDocument();
     expect(screen.getByText("Next retry")).toBeInTheDocument();
     expect(screen.getByText("Protected processes")).toBeInTheDocument();
     expect(screen.getByLabelText("Raw audit: 24 total, 21 succeeded, 2 failed, 1 running, 0 cancelled")).toBeInTheDocument();

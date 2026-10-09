@@ -659,6 +659,9 @@ const ImportControlPage = ({
     && (statusFilter === "all" || job.status === statusFilter)), [data?.jobs, phaseFilter, statusFilter]);
   const queuePages = useClientPagination(filteredJobs, 12, `${phaseFilter}:${statusFilter}`);
   const activePhase = data?.phases.find((phase) => phase.id === data.activePhaseId);
+  const runnerMessage = data?.runnerMessage && data.nextRetryAtUtc
+    ? `${data.runnerMessage} Automatic retry scheduled for ${formatDateTime(data.nextRetryAtUtc)}.`
+    : data?.runnerMessage;
 
   const requestStart = async (phase: ImportPhaseStatus) => {
     if (armedPhaseId !== phase.id) {
@@ -684,8 +687,8 @@ const ImportControlPage = ({
           <p className="kicker">Protected runner pool</p>
           <h2>{data.isImportRunning ? activePhase?.name ?? "Import detected" : "Ready for dispatch"}</h2>
           <p>{data.isImportRunning
-            ? data.runnerMessage
-              ? data.runnerMessage
+            ? runnerMessage
+              ? runnerMessage
               : data.activeMonths.length > 0
               ? `${data.activeMonths.map((month) => calendarMonth.format(new Date(`${month}-01T00:00:00Z`))).join(", ")} ${data.activeMonths.length === 1 ? "is" : "are"} being collected behind one shared request gate.`
               : "The resume process is waiting for its next safe attempt."
