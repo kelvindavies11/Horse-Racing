@@ -21,6 +21,7 @@ public static class BhaRawCollectionServiceCollectionExtensions
 
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<IRawIngestionRepository, RawIngestionRepository>();
+        services.AddScoped<IRaceResultsWorkQueue, RaceResultsWorkQueueRepository>();
         services.AddScoped<IRaceResultsPayloadInterpreter, BhaResultsPayloadInterpreter>();
         services.AddScoped<CollectRaceResultsHistoryHandler>();
 

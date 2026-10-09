@@ -13,6 +13,8 @@ public sealed class HorseRacingDbContext(DbContextOptions<HorseRacingDbContext> 
 
     public DbSet<RawPayload> RawPayloads => Set<RawPayload>();
 
+    public DbSet<RaceResultsWorkQueueItem> RaceResultsWorkQueueItems => Set<RaceResultsWorkQueueItem>();
+
     public DbSet<CuratedPromotionRun> CuratedPromotionRuns => Set<CuratedPromotionRun>();
 
     public DbSet<CuratedDomainObject> CuratedDomainObjects => Set<CuratedDomainObject>();

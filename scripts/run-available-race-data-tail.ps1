@@ -16,7 +16,7 @@ param(
     [switch] $SkipBuild,
 
     [ValidateRange(1, 5)]
-    [int] $MaxParallelism = 2
+    [int] $MaxParallelism = 1
 )
 
 Set-StrictMode -Version Latest
@@ -34,6 +34,7 @@ else {
     [System.IO.Path]::GetFullPath((Join-Path $repositoryRoot $StateDirectory))
 }
 $progressPath = Join-Path $statePath 'progress.csv'
+$weatherProgressPath = Join-Path $statePath 'weather-progress.csv'
 $culture = [System.Globalization.CultureInfo]::InvariantCulture
 $firstMonth = [datetime]::ParseExact($StartMonth, 'yyyy-MM', $culture)
 $lastMonth = [datetime]::ParseExact($EndMonth, 'yyyy-MM', $culture)
@@ -143,6 +144,17 @@ if (-not $DryRun) {
 }
 
 $failedRanges = [System.Collections.Generic.List[string]]::new()
+$activeWeatherWorkers = [System.Collections.Generic.List[object]]::new()
+$weatherBacklog = [System.Collections.Generic.List[object]]::new()
+$completedWeatherRanges = [System.Collections.Generic.HashSet[string]]::new(
+    [System.StringComparer]::Ordinal)
+if (Test-Path -LiteralPath $weatherProgressPath) {
+    foreach ($entry in Import-Csv -LiteralPath $weatherProgressPath) {
+        if ($entry.Status -eq 'Succeeded') {
+            [void] $completedWeatherRanges.Add("$($entry.From)|$($entry.To)")
+        }
+    }
+}
 $pendingMonths = [System.Collections.Generic.List[object]]::new()
 foreach ($month in $months) {
     $coveredTo = $successfulCoverage[$month.From]
@@ -154,6 +166,9 @@ foreach ($month in $months) {
             $months.Count,
             $month.From,
             $month.To)
+        if (-not $completedWeatherRanges.Contains("$($month.From)|$($month.To)")) {
+            $weatherBacklog.Add($month)
+        }
         continue
     }
 
@@ -180,6 +195,14 @@ if ($DryRun) {
     return
 }
 
+if ($weatherBacklog.Count -gt 0) {
+    $activeWeatherWorkers.Add((Start-RaceWeatherWorker `
+        -Month $weatherBacklog[0] `
+        -RawProjectPath $rawProjectPath `
+        -StatePath $statePath))
+    $weatherBacklog.RemoveAt(0)
+}
+
 for ($batchStart = 0; $batchStart -lt $pendingMonths.Count; $batchStart += $MaxParallelism) {
     $batchEnd = [Math]::Min($batchStart + $MaxParallelism - 1, $pendingMonths.Count - 1)
     $batch = @($pendingMonths[$batchStart..$batchEnd])
@@ -193,6 +216,23 @@ for ($batchStart = 0; $batchStart -lt $pendingMonths.Count; $batchStart += $MaxP
         -RawProjectPath $rawProjectPath `
         -CuratedProjectPath $curatedProjectPath `
         -StatePath $statePath)
+
+    foreach ($weatherWorker in $activeWeatherWorkers.ToArray()) {
+        $weatherExitCode = Complete-RaceWeatherWorker -Worker $weatherWorker
+        $month = $weatherWorker.Month
+        $status = if ($weatherExitCode -eq 0) { 'Succeeded' } else { 'Failed' }
+        [pscustomobject]@{
+            From = $month.From
+            To = $month.To
+            Status = $status
+            ExitCode = $weatherExitCode
+            CompletedAtUtc = [datetime]::UtcNow.ToString('O', $culture)
+        } | Export-Csv -LiteralPath $weatherProgressPath -NoTypeInformation -Append
+        if ($weatherExitCode -ne 0) {
+            $failedRanges.Add("$($month.From):$($month.To)")
+        }
+        [void] $activeWeatherWorkers.Remove($weatherWorker)
+    }
 
     foreach ($rawResult in $rawResults) {
         $month = $rawResult.Month
@@ -217,11 +257,48 @@ for ($batchStart = 0; $batchStart -lt $pendingMonths.Count; $batchStart += $MaxP
                 $month.To,
                 $rawResult.RawExitCode,
                 $rawResult.CuratedExitCode)
+            continue
         }
+
+        $weatherBacklog.Add($month)
+    }
+
+    if ($failedRanges.Count -eq 0 -and $activeWeatherWorkers.Count -eq 0 -and $weatherBacklog.Count -gt 0) {
+        $activeWeatherWorkers.Add((Start-RaceWeatherWorker `
+            -Month $weatherBacklog[0] `
+            -RawProjectPath $rawProjectPath `
+            -StatePath $statePath))
+        $weatherBacklog.RemoveAt(0)
     }
 
     if ($failedRanges.Count -gt 0) {
         break
+    }
+}
+
+while ($activeWeatherWorkers.Count -gt 0) {
+    foreach ($weatherWorker in $activeWeatherWorkers.ToArray()) {
+        $weatherExitCode = Complete-RaceWeatherWorker -Worker $weatherWorker
+        $month = $weatherWorker.Month
+        $status = if ($weatherExitCode -eq 0) { 'Succeeded' } else { 'Failed' }
+        [pscustomobject]@{
+            From = $month.From
+            To = $month.To
+            Status = $status
+            ExitCode = $weatherExitCode
+            CompletedAtUtc = [datetime]::UtcNow.ToString('O', $culture)
+        } | Export-Csv -LiteralPath $weatherProgressPath -NoTypeInformation -Append
+        if ($weatherExitCode -ne 0) {
+            $failedRanges.Add("$($month.From):$($month.To)")
+        }
+        [void] $activeWeatherWorkers.Remove($weatherWorker)
+    }
+    if ($failedRanges.Count -eq 0 -and $weatherBacklog.Count -gt 0) {
+        $activeWeatherWorkers.Add((Start-RaceWeatherWorker `
+            -Month $weatherBacklog[0] `
+            -RawProjectPath $rawProjectPath `
+            -StatePath $statePath))
+        $weatherBacklog.RemoveAt(0)
     }
 }
 

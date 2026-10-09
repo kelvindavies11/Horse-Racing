@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Text.RegularExpressions;
 using HorseRacing.Application.Ingestion.Raw;
@@ -31,9 +30,15 @@ public sealed partial class BhaHistoricalResultsApiClient(
                 "Configure BhaCollection:RacingStatusApiBearerToken outside source control.");
         }
 
-        using var response = await SendWithRateLimitRetryAsync(
-            sourceUri,
-            bearerToken,
+        using var request = new HttpRequestMessage(HttpMethod.Get, sourceUri);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
+        request.Headers.Referrer = ResultsPageUri;
+        request.Headers.Add("Origin", "https://www.britishhorseracing.com");
+
+        using var response = await httpClient.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
             cancellationToken);
 
         var effectiveUri = response.RequestMessage?.RequestUri ?? sourceUri;
@@ -60,40 +65,6 @@ public sealed partial class BhaHistoricalResultsApiClient(
             response.Headers.ETag?.ToString(),
             response.Content.Headers.LastModified,
             content);
-    }
-
-    private async Task<HttpResponseMessage> SendWithRateLimitRetryAsync(
-        Uri sourceUri,
-        string bearerToken,
-        CancellationToken cancellationToken)
-    {
-        const int maximumAttempts = 4;
-        for (var attempt = 1; attempt <= maximumAttempts; attempt++)
-        {
-            using var request = new HttpRequestMessage(HttpMethod.Get, sourceUri);
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
-            request.Headers.Referrer = ResultsPageUri;
-            request.Headers.Add("Origin", "https://www.britishhorseracing.com");
-
-            var response = await httpClient.SendAsync(
-                request,
-                HttpCompletionOption.ResponseHeadersRead,
-                cancellationToken);
-            if ((int)response.StatusCode != 429 || attempt == maximumAttempts)
-            {
-                return response;
-            }
-
-            var delay = response.Headers.RetryAfter?.Delta
-                        ?? (response.Headers.RetryAfter?.Date - DateTimeOffset.UtcNow)
-                        ?? TimeSpan.FromSeconds(attempt * 10);
-            delay = TimeSpan.FromSeconds(Math.Clamp(delay.TotalSeconds, 1, 30));
-            response.Dispose();
-            await Task.Delay(delay, cancellationToken);
-        }
-
-        throw new UnreachableException();
     }
 
     public static void ValidateSourceUri(Uri sourceUri)

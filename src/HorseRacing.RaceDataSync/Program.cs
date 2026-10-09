@@ -32,8 +32,23 @@ var options = new RaceDataSyncOptions
     DelayBetweenRequestsMilliseconds = int.TryParse(
         syncConfiguration["DelayBetweenRequestsMilliseconds"],
         out var configuredDelay)
-        ? Math.Clamp(configuredDelay, 0, 10_000)
-        : 1000
+        ? Math.Clamp(configuredDelay, 10_000, 120_000)
+        : 10_000,
+    WeatherDelayBetweenRequestsMilliseconds = int.TryParse(
+        syncConfiguration["WeatherDelayBetweenRequestsMilliseconds"],
+        out var configuredWeatherDelay)
+        ? Math.Clamp(configuredWeatherDelay, 250, 10_000)
+        : 1_000,
+    ThrottleRetryBaseDelayMinutes = int.TryParse(
+        syncConfiguration["ThrottleRetryBaseDelayMinutes"],
+        out var configuredThrottleDelay)
+        ? Math.Clamp(configuredThrottleDelay, 1, 60)
+        : 15,
+    MaximumThrottleRetries = int.TryParse(
+        syncConfiguration["MaximumThrottleRetries"],
+        out var configuredThrottleRetries)
+        ? Math.Clamp(configuredThrottleRetries, 0, 10)
+        : 3
 };
 
 var defaultTo = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime).AddDays(-1);
@@ -95,16 +110,19 @@ try
                 options.CollectorVersion,
                 TimeSpan.FromMilliseconds(options.DelayBetweenRequestsMilliseconds),
                 reuseSuccessfulPayloads,
-                dispatchItemId),
+                dispatchItemId,
+                TimeSpan.FromMinutes(options.ThrottleRetryBaseDelayMinutes),
+                options.MaximumThrottleRetries),
             shutdown.Token);
         logger.LogInformation(
             "Raw collection found {Fixtures} fixtures and {Races} races, captured {Results} new result payloads, " +
-            "reused {Reused} existing payloads, observed {Unavailable} unavailable results, and had {Failures} failed requests.",
+            "reused {Reused} existing payloads, observed {Unavailable} unavailable results, recovered from {ThrottleRetries} throttled attempts, and had {Failures} failed requests.",
             collection.FixturesFound,
             collection.RacesFound,
             collection.ResultPayloadsCollected,
             collection.PayloadsReused,
             collection.UnavailableResultPayloads,
+            collection.ThrottleRetries,
             collection.FailedCollections);
         failures += collection.FailedCollections;
     }
@@ -156,7 +174,7 @@ try
                 fromDate,
                 toDate,
                 options.CollectorVersion,
-                TimeSpan.FromMilliseconds(options.DelayBetweenRequestsMilliseconds)),
+                TimeSpan.FromMilliseconds(options.WeatherDelayBetweenRequestsMilliseconds)),
             shutdown.Token);
         logger.LogInformation(
             "Weather enrichment processed {Targets} races, stored {Locations} locations and {WeatherRows} weather rows ({Failures} failures).",
@@ -220,5 +238,8 @@ internal sealed class RaceDataSyncOptions
     public string CollectorVersion { get; init; } = "2.0.0";
     public string PromotionJobName { get; init; } = "bha-results-to-curated";
     public string PromoterVersion { get; init; } = "2.0.0";
-    public int DelayBetweenRequestsMilliseconds { get; init; } = 1000;
+    public int DelayBetweenRequestsMilliseconds { get; init; } = 10_000;
+    public int WeatherDelayBetweenRequestsMilliseconds { get; init; } = 1_000;
+    public int ThrottleRetryBaseDelayMinutes { get; init; } = 15;
+    public int MaximumThrottleRetries { get; init; } = 3;
 }

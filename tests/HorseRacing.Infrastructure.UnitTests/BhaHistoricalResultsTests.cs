@@ -1,6 +1,8 @@
+using System.Net;
 using System.Text;
 using HorseRacing.Application.Ingestion.Results;
 using HorseRacing.Infrastructure.Ingestion.Bha;
+using Microsoft.Extensions.Options;
 
 namespace HorseRacing.Infrastructure.UnitTests;
 
@@ -69,5 +71,42 @@ public sealed class BhaHistoricalResultsTests
         Assert.Equal("https://api09.horseracing.software/bha/v1/fixtures/2026/101/races", interpreter.CreateFixtureRacesUri(fixture).ToString());
         Assert.Equal("https://api09.horseracing.software/bha/v1/races/2026/202/1/results", interpreter.CreateRaceResultsUri(race).ToString());
         Assert.Equal("The Example Stakes", race.RaceName);
+    }
+
+    [Fact]
+    public async Task Client_returns_the_first_throttle_response_for_audited_recovery()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.TooManyRequests);
+        using var httpClient = new HttpClient(handler);
+        var client = new BhaHistoricalResultsApiClient(
+            httpClient,
+            Options.Create(new BhaCollectionOptions
+            {
+                RacingStatusApiBearerToken = "test-token"
+            }));
+
+        var response = await client.GetAsync(
+            new Uri("https://api09.horseracing.software/bha/v1/races/2026/456/0/results"),
+            CancellationToken.None);
+
+        Assert.Equal(429, response.StatusCode);
+        Assert.Equal(1, handler.RequestCount);
+    }
+
+    private sealed class RecordingHandler(HttpStatusCode statusCode) : HttpMessageHandler
+    {
+        public int RequestCount { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            RequestCount++;
+            return Task.FromResult(new HttpResponseMessage(statusCode)
+            {
+                RequestMessage = request,
+                Content = new StringContent("{\"message\":\"Too Many Attempts.\"}")
+            });
+        }
     }
 }

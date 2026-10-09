@@ -14,11 +14,11 @@ param(
     [ValidateRange(1, 120)]
     [int] $ProbeIntervalMinutes = 15,
 
-    [ValidateRange(1000, 10000)]
-    [int] $RequestDelayMilliseconds = 5000,
+    [ValidateRange(10000, 120000)]
+    [int] $RequestDelayMilliseconds = 10000,
 
     [ValidateRange(1, 5)]
-    [int] $MaxParallelism = 2
+    [int] $MaxParallelism = 1
 )
 
 Set-StrictMode -Version Latest
@@ -34,6 +34,7 @@ else {
     [System.IO.Path]::GetFullPath((Join-Path $repositoryRoot $StateDirectory))
 }
 $progressPath = Join-Path $statePath 'progress.csv'
+$weatherProgressPath = Join-Path $statePath 'weather-progress.csv'
 $culture = [System.Globalization.CultureInfo]::InvariantCulture
 $firstMonth = [datetime]::ParseExact($StartMonth, 'yyyy-MM', $culture)
 $lastMonth = [datetime]::ParseExact($EndMonth, 'yyyy-MM', $culture)
@@ -144,15 +145,26 @@ function Test-BhaApiReady([string] $Token) {
 }
 
 function Get-SucceededMonthCount {
-    if (-not (Test-Path -LiteralPath $progressPath)) {
+    if (-not (Test-Path -LiteralPath $progressPath) -or
+        -not (Test-Path -LiteralPath $weatherProgressPath)) {
         return 0
     }
 
-    return @(
+    $rawMonths = @(
         Import-Csv -LiteralPath $progressPath |
             Where-Object Status -eq 'Succeeded' |
             Select-Object -ExpandProperty From -Unique
-    ).Count
+    )
+    $weatherMonths = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::Ordinal)
+    foreach ($from in @(
+        Import-Csv -LiteralPath $weatherProgressPath |
+            Where-Object Status -eq 'Succeeded' |
+            Select-Object -ExpandProperty From -Unique)) {
+        [void] $weatherMonths.Add($from)
+    }
+
+    return @($rawMonths | Where-Object { $weatherMonths.Contains($_) }).Count
 }
 
 function Wait-ForExclusiveImportSlot {

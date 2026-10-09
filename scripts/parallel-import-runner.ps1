@@ -28,6 +28,81 @@ function Invoke-SerializedCuratedDrain {
     return $curatedExitCode
 }
 
+function Start-RaceWeatherWorker {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [object] $Month,
+
+        [Parameter(Mandatory)]
+        [string] $RawProjectPath,
+
+        [Parameter(Mandatory)]
+        [string] $StatePath
+    )
+
+    $monthKey = $Month.From.Substring(0, 7)
+    $stdoutPath = Join-Path $StatePath "weather-$monthKey.stdout.log"
+    $stderrPath = Join-Path $StatePath "weather-$monthKey.stderr.log"
+    $arguments = @(
+        'run',
+        '--no-build',
+        '--project',
+        (ConvertTo-ProcessArgument $RawProjectPath),
+        '--',
+        '--mode',
+        'weather',
+        '--from',
+        $Month.From,
+        '--to',
+        $Month.To)
+
+    Write-Host ('  Starting Weather worker for {0} through {1}.' -f $Month.From, $Month.To)
+    $process = Start-Process `
+        -FilePath 'dotnet' `
+        -ArgumentList $arguments `
+        -WorkingDirectory ([System.IO.Path]::GetDirectoryName($RawProjectPath)) `
+        -WindowStyle Hidden `
+        -RedirectStandardOutput $stdoutPath `
+        -RedirectStandardError $stderrPath `
+        -PassThru
+
+    return [pscustomobject]@{
+        Month = $Month
+        Process = $process
+        StandardOutputPath = $stdoutPath
+        StandardErrorPath = $stderrPath
+    }
+}
+
+function Complete-RaceWeatherWorker {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [object] $Worker
+    )
+
+    $Worker.Process.WaitForExit()
+    $exitCode = $Worker.Process.ExitCode
+    if (Test-Path -LiteralPath $Worker.StandardOutputPath) {
+        Get-Content -LiteralPath $Worker.StandardOutputPath | ForEach-Object {
+            Write-Host ('  [weather {0}] {1}' -f $Worker.Month.From.Substring(0, 7), $_)
+        }
+    }
+    if (Test-Path -LiteralPath $Worker.StandardErrorPath) {
+        Get-Content -LiteralPath $Worker.StandardErrorPath | ForEach-Object {
+            Write-Warning ('[weather {0}] {1}' -f $Worker.Month.From.Substring(0, 7), $_)
+        }
+    }
+
+    Write-Host (
+        '  [{0}] Weather worker exited {1}.' -f
+        $Worker.Month.From.Substring(0, 7),
+        $exitCode)
+    $Worker.Process.Dispose()
+    return $exitCode
+}
+
 function Invoke-ParallelRawBatch {
     [CmdletBinding()]
     param(

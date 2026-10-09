@@ -19,6 +19,77 @@ public interface IRaceResultsPayloadInterpreter
     IReadOnlyCollection<ResultRaceReference> ReadRaces(byte[] content);
 }
 
+public interface IRaceResultsWorkQueue
+{
+    Task EnqueueAsync(
+        RaceResultsWorkItemDefinition definition,
+        CancellationToken cancellationToken);
+
+    Task<RaceResultsWorkItem?> ClaimNextAsync(
+        string dispatchItemId,
+        CancellationToken cancellationToken);
+
+    Task CompleteAsync(
+        RaceResultsWorkCompletion completion,
+        CancellationToken cancellationToken);
+
+    Task<RaceResultsWorkQueueSummary> GetSummaryAsync(
+        string dispatchItemId,
+        CancellationToken cancellationToken);
+
+    Task<IReadOnlyCollection<string>> GetSuccessfulJobNamesAsync(
+        string dispatchItemId,
+        CancellationToken cancellationToken);
+}
+
+public enum RaceResultsWorkType
+{
+    FixtureRaces,
+    RaceResults
+}
+
+public enum RaceResultsWorkDisposition
+{
+    Succeeded,
+    Unavailable,
+    Failed
+}
+
+public sealed record RaceResultsWorkItemDefinition(
+    string DispatchItemId,
+    RaceResultsWorkType WorkType,
+    string JobName,
+    string SourceName,
+    Uri SourceUri,
+    int Priority,
+    bool RefreshCompletedItem = false);
+
+public sealed record RaceResultsWorkItem(
+    Guid Id,
+    RaceResultsWorkType WorkType,
+    string JobName,
+    string SourceName,
+    Uri SourceUri);
+
+public sealed record RaceResultsWorkCompletion(
+    Guid WorkItemId,
+    RaceResultsWorkDisposition Disposition,
+    Guid RawCollectionRunId,
+    Guid? RawPayloadId,
+    int? HttpStatusCode,
+    string? ErrorCode,
+    string? ErrorMessage,
+    DateTimeOffset? RetryAtUtc = null);
+
+public sealed record RaceResultsWorkQueueSummary(
+    int FixtureItems,
+    int ResultItems,
+    int PendingItems,
+    int RunningItems,
+    int SucceededItems,
+    int UnavailableItems,
+    int FailedItems);
+
 public sealed record ResultFixtureReference(
     int FixtureYear,
     int FixtureId,
@@ -42,7 +113,9 @@ public sealed record CollectRaceResultsHistoryCommand(
     string CollectorVersion,
     TimeSpan DelayBetweenRequests,
     bool ReuseSuccessfulPayloads = false,
-    string? DispatchItemId = null);
+    string? DispatchItemId = null,
+    TimeSpan ThrottleRetryBaseDelay = default,
+    int MaximumThrottleRetries = 0);
 
 public sealed record CollectRaceResultsHistoryResult(
     int FixturesFound,
@@ -50,5 +123,6 @@ public sealed record CollectRaceResultsHistoryResult(
     int ResultPayloadsCollected,
     int PayloadsReused,
     int UnavailableResultPayloads,
+    int ThrottleRetries,
     int FailedCollections,
     IReadOnlyCollection<string> SuccessfulJobNames);
