@@ -136,6 +136,13 @@ npm install
 npm run dev
 ```
 
+On Windows, double-click `start-horse-racing.bat` in the repository root to start the API
+and website in separate terminal windows and open `http://127.0.0.1:5173`. The launcher
+keeps an existing service when port `5080` or `5173` is already active, and installs the
+website packages with `npm ci` only when `node_modules` is missing. It uses an existing
+`ConnectionStrings__HorseRacing` environment variable when provided, otherwise it uses
+the local PostgreSQL connection from `compose.yaml`.
+
 The website reads Curated-layer data through the local API only. It provides race results with complete finishing order, course location and race-hour weather, linked-record navigation from each explored entity, provenance inspection, inferred relationship patterns and a live read-only Raw/Curated job audit with explicit start, in-progress and finish times. A separate **Import control** workspace visualises the fixed 2015–2026 monthly queue and can safely resume an eligible phase; its local-only actions preserve the one-import-at-a-time guard and do not expose a force-stop control. Endpoint configuration and frontend quality gates are documented in [the web README](src/HorseRacing.Web/README.md).
 
 ## Current status
