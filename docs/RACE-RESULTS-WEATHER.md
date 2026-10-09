@@ -35,7 +35,7 @@ Use the restartable monthly runner for longer periods. The fast path deliberatel
 
 1. `HorseRacing.RaceDataSync --mode raw --reuse-successful` captures only Raw payloads that have not already succeeded. A BHA throttle response is retained as an immutable Raw attempt, followed by bounded 15, 30 and 60 minute recovery delays; a successful retry continues the same batch.
 2. One coordinator runs `HorseRacing.Bha.CuratedPromoter --drain` every eight minutes while Raw collection continues and again whenever a monthly Raw runner completes. The serialized checkpoints make newly downloaded results visible without allowing Curated drains to overlap.
-3. A separate Open-Meteo worker enriches one completed month while the next BHA month is collected. It uses its own one-second cadence and `weather-progress.csv`, so it does not increase BHA traffic and can independently resume missing months.
+3. A separate Open-Meteo worker enriches one completed month while the next BHA month is collected. The coordinator polls it during Raw collection and starts the next weather month as soon as the prior one exits. It uses its own one-second cadence and `weather-progress.csv`, so it does not increase BHA traffic and can independently resume missing months.
 
 The runner records one immutable status row per monthly attempt and skips months that have already succeeded. Weather has a separate checkpoint so an older raw-successful month with missing weather is backfilled without redownloading BHA data.
 

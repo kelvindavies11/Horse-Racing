@@ -103,6 +103,86 @@ function Complete-RaceWeatherWorker {
     return $exitCode
 }
 
+function Update-RaceWeatherPipeline {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [object] $ActiveWorkers,
+
+        [Parameter(Mandatory)]
+        [object] $Backlog,
+
+        [Parameter(Mandatory)]
+        [string] $RawProjectPath,
+
+        [Parameter(Mandatory)]
+        [string] $StatePath,
+
+        [Parameter(Mandatory)]
+        [string] $ProgressPath,
+
+        [switch] $WaitForCompletion
+    )
+
+    $failures = [System.Collections.Generic.List[object]]::new()
+    $culture = [System.Globalization.CultureInfo]::InvariantCulture
+    do {
+        if ($ActiveWorkers.Count -eq 0 -and $Backlog.Count -gt 0) {
+            $ActiveWorkers.Add((Start-RaceWeatherWorker `
+                -Month $Backlog[0] `
+                -RawProjectPath $RawProjectPath `
+                -StatePath $StatePath))
+            $Backlog.RemoveAt(0)
+        }
+
+        if ($WaitForCompletion -and $ActiveWorkers.Count -gt 0 -and
+            -not $ActiveWorkers[0].Process.HasExited) {
+            $ActiveWorkers[0].Process.WaitForExit()
+        }
+
+        foreach ($worker in $ActiveWorkers.ToArray()) {
+            if (-not $worker.Process.HasExited) {
+                continue
+            }
+
+            $exitCode = Complete-RaceWeatherWorker -Worker $worker
+            $status = if ($exitCode -eq 0) { 'Succeeded' } else { 'Failed' }
+            [pscustomobject]@{
+                From = $worker.Month.From
+                To = $worker.Month.To
+                Status = $status
+                ExitCode = $exitCode
+                CompletedAtUtc = [datetime]::UtcNow.ToString('O', $culture)
+            } | Export-Csv -LiteralPath $ProgressPath -NoTypeInformation -Append
+            if ($exitCode -ne 0) {
+                $failures.Add([pscustomobject]@{
+                    Month = $worker.Month
+                    ExitCode = $exitCode
+                })
+            }
+            [void] $ActiveWorkers.Remove($worker)
+        }
+
+        if ($failures.Count -gt 0) {
+            break
+        }
+
+        if (-not $WaitForCompletion) {
+            if ($ActiveWorkers.Count -eq 0 -and $Backlog.Count -gt 0) {
+                $ActiveWorkers.Add((Start-RaceWeatherWorker `
+                    -Month $Backlog[0] `
+                    -RawProjectPath $RawProjectPath `
+                    -StatePath $StatePath))
+                $Backlog.RemoveAt(0)
+            }
+            break
+        }
+    }
+    while ($ActiveWorkers.Count -gt 0 -or $Backlog.Count -gt 0)
+
+    return @($failures)
+}
+
 function Invoke-ParallelRawBatch {
     [CmdletBinding()]
     param(
@@ -117,6 +197,12 @@ function Invoke-ParallelRawBatch {
 
         [Parameter(Mandatory)]
         [string] $StatePath,
+
+        [object] $ActiveWeatherWorkers,
+
+        [object] $WeatherBacklog,
+
+        [string] $WeatherProgressPath,
 
         [ValidateRange(1, 60)]
         [int] $CuratedDrainIntervalMinutes = 8
@@ -175,6 +261,7 @@ function Invoke-ParallelRawBatch {
     }
 
     $rawResults = [System.Collections.Generic.List[object]]::new()
+    $weatherFailures = [System.Collections.Generic.List[object]]::new()
     $curatedExitCode = 0
     $nextCuratedDrainAt = [datetime]::UtcNow.AddMinutes($CuratedDrainIntervalMinutes)
     while ($pendingWorkers.Count -gt 0) {
@@ -232,6 +319,20 @@ function Invoke-ParallelRawBatch {
             $nextCuratedDrainAt = [datetime]::UtcNow.AddMinutes($CuratedDrainIntervalMinutes)
         }
 
+        if ($null -ne $ActiveWeatherWorkers -and
+            $null -ne $WeatherBacklog -and
+            -not [string]::IsNullOrWhiteSpace($WeatherProgressPath) -and
+            $weatherFailures.Count -eq 0) {
+            foreach ($failure in @(Update-RaceWeatherPipeline `
+                -ActiveWorkers $ActiveWeatherWorkers `
+                -Backlog $WeatherBacklog `
+                -RawProjectPath $RawProjectPath `
+                -StatePath $StatePath `
+                -ProgressPath $WeatherProgressPath)) {
+                $weatherFailures.Add($failure)
+            }
+        }
+
         if ($pendingWorkers.Count -gt 0) {
             Start-Sleep -Seconds 2
         }
@@ -242,6 +343,7 @@ function Invoke-ParallelRawBatch {
             Month = $_.Month
             RawExitCode = $_.RawExitCode
             CuratedExitCode = $curatedExitCode
+            WeatherFailures = @($weatherFailures)
         }
     })
 }

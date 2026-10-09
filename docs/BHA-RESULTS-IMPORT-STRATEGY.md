@@ -115,7 +115,9 @@ The implementation makes these source changes:
   Raw run/payload lineage; five-minute stale claims are recovered transactionally with
   `FOR UPDATE SKIP LOCKED`;
 - orchestration uses one BHA worker at the ten-second cadence and maintains a separate
-  `weather-progress.csv`, allowing missing 2026 weather to be backfilled concurrently.
+  `weather-progress.csv`, allowing missing 2026 weather to be backfilled concurrently;
+  weather completion is polled during Raw collection so the next weather month starts
+  immediately instead of waiting for the active BHA month to finish.
 
 Automated verification covers both layers:
 
