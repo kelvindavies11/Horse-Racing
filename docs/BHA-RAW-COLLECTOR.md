@@ -207,8 +207,9 @@ The `AddRawIngestion` migration creates two dedicated tables:
   exactly one collection run and is never updated by the application.
 
 Outcomes are `Running`, `Succeeded`, `Failed`, and `Cancelled`. HTTP non-success responses
-store both the received body and an `http_<status>` error result. Network, timeout, policy,
-and response-size failures store a failed audit result without inventing a payload.
+store both the received body and an `http_<status>` error result. A timeout is recorded as
+`source_timeout`; other network failures use `source_request_failed`. Policy and
+response-size failures also store a failed audit result without inventing a payload.
 
 ## Local run
 

@@ -94,6 +94,25 @@ public sealed class CollectRawSourceHandlerTests
     }
 
     [Fact]
+    public async Task Timeout_stores_a_distinct_audit_error_without_a_payload()
+    {
+        var repository = new RecordingRepository();
+        var handler = CreateHandler(
+            new StubSourceClient(new TaskCanceledException("The request timed out.")),
+            repository);
+
+        var result = await handler.HandleAsync(CreateCommand(), CancellationToken.None);
+
+        Assert.Equal(RawCollectionOutcome.Failed, result.Outcome);
+        Assert.Null(result.PayloadId);
+        Assert.Equal("source_timeout", result.ErrorCode);
+        Assert.Equal("The request timed out.", result.ErrorMessage);
+        var finish = Assert.Single(repository.Finishes);
+        Assert.Null(finish.Payload);
+        Assert.Equal("source_timeout", finish.Completion.ErrorCode);
+    }
+
+    [Fact]
     public async Task Concurrent_collection_is_reused_without_a_second_source_request()
     {
         var existing = new RawCollectionResult(

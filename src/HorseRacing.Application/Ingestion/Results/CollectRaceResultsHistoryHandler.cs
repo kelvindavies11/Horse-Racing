@@ -10,7 +10,7 @@ public sealed class CollectRaceResultsHistoryHandler(
     TimeProvider timeProvider)
 {
     private static readonly TimeSpan UnavailableRetryDelay = TimeSpan.FromHours(24);
-    private static readonly TimeSpan FailedRetryDelay = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan FailedRetryDelay = TimeSpan.FromMinutes(1);
 
     public async Task<CollectRaceResultsHistoryResult> HandleAsync(
         CollectRaceResultsHistoryCommand command,
@@ -25,6 +25,7 @@ public sealed class CollectRaceResultsHistoryHandler(
         var failedCollections = 0;
         var payloadsReused = 0;
         var throttleRetries = 0;
+        var transientRetries = 0;
         var resultPayloadsCollected = 0;
 
         var racecourses = await CollectAsync(
@@ -112,6 +113,7 @@ public sealed class CollectRaceResultsHistoryHandler(
                 dispatchItemId,
                 cancellationToken);
             throttleRetries += collection.ThrottleRetries;
+            transientRetries += collection.TransientRetries;
 
             if (collection.Result.HttpStatusCode == 404)
             {
@@ -193,6 +195,7 @@ public sealed class CollectRaceResultsHistoryHandler(
             }
 
             throttleRetries += attempt.ThrottleRetries;
+            transientRetries += attempt.TransientRetries;
         }
 
         async Task CompleteAsync(
@@ -217,6 +220,7 @@ public sealed class CollectRaceResultsHistoryHandler(
         async Task<CollectRaceResultsHistoryResult> BuildResultAsync(int fixturesFound)
         {
             var summary = await workQueue.GetSummaryAsync(dispatchItemId, cancellationToken);
+            var reportedFailures = Math.Max(failedCollections, summary.FailedItems);
             successfulJobNames.UnionWith(
                 await workQueue.GetSuccessfulJobNamesAsync(dispatchItemId, cancellationToken));
             return new CollectRaceResultsHistoryResult(
@@ -226,7 +230,8 @@ public sealed class CollectRaceResultsHistoryHandler(
                 payloadsReused,
                 summary.UnavailableItems,
                 throttleRetries,
-                failedCollections,
+                transientRetries,
+                reportedFailures,
                 successfulJobNames.ToList());
         }
     }
@@ -255,6 +260,7 @@ public sealed class CollectRaceResultsHistoryHandler(
         }
 
         var throttleRetries = 0;
+        var transientRetries = 0;
         while (true)
         {
             var result = await collector.HandleAsync(
@@ -267,25 +273,58 @@ public sealed class CollectRaceResultsHistoryHandler(
                     dispatchItemId),
                 cancellationToken);
 
-            if (result.HttpStatusCode != 429
-                || throttleRetries >= command.MaximumThrottleRetries)
+            if (result.HttpStatusCode is 418 or 429
+                && throttleRetries < command.MaximumThrottleRetries)
             {
-                return new CollectionAttempt(result, false, throttleRetries);
+                throttleRetries++;
+                await Task.Delay(
+                    CalculateRetryDelay(
+                        command.ThrottleRetryBaseDelay,
+                        throttleRetries,
+                        TimeSpan.FromHours(1)),
+                    cancellationToken);
+                continue;
             }
 
-            throttleRetries++;
-            var multiplier = 1L << Math.Min(throttleRetries - 1, 2);
-            var retryDelayTicks = Math.Min(
-                command.ThrottleRetryBaseDelay.Ticks * multiplier,
-                TimeSpan.FromHours(1).Ticks);
-            await Task.Delay(TimeSpan.FromTicks(retryDelayTicks), cancellationToken);
+            if (IsTransientFailure(result)
+                && transientRetries < command.MaximumTransientRetries)
+            {
+                transientRetries++;
+                await Task.Delay(
+                    CalculateRetryDelay(
+                        command.TransientRetryBaseDelay,
+                        transientRetries,
+                        TimeSpan.FromMinutes(5)),
+                    cancellationToken);
+                continue;
+            }
+
+            return new CollectionAttempt(
+                result,
+                false,
+                throttleRetries,
+                transientRetries);
         }
     }
 
+    private static TimeSpan CalculateRetryDelay(
+        TimeSpan baseDelay,
+        int retryNumber,
+        TimeSpan maximumDelay)
+    {
+        var multiplier = 1L << Math.Min(retryNumber - 1, 2);
+        var retryDelayTicks = Math.Min(baseDelay.Ticks * multiplier, maximumDelay.Ticks);
+        return TimeSpan.FromTicks(retryDelayTicks);
+    }
+
+    private static bool IsTransientFailure(RawCollectionResult result) =>
+        result.ErrorCode is "source_timeout" or "source_request_failed"
+        || result.HttpStatusCode is 408 or >= 500;
+
     private static bool ShouldStopBatch(RawCollectionResult result) =>
         result.Outcome == RawCollectionOutcome.Failed
-        && (result.ErrorCode == "source_request_failed"
-            || result.HttpStatusCode is 408 or 418 or 429 or >= 500);
+        && (result.ErrorCode is "source_timeout" or "source_request_failed"
+            || result.HttpStatusCode is 401 or 403 or 408 or 418 or 429 or >= 500);
 
     private static IEnumerable<(int Year, int Month)> EnumerateMonths(
         DateOnly fromDate,
@@ -332,10 +371,26 @@ public sealed class CollectRaceResultsHistoryHandler(
                 nameof(command),
                 "The maximum throttle retry count must be between zero and ten.");
         }
+
+        if (command.TransientRetryBaseDelay < TimeSpan.Zero
+            || command.TransientRetryBaseDelay > TimeSpan.FromMinutes(10))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(command),
+                "The transient retry base delay must be between zero and ten minutes.");
+        }
+
+        if (command.MaximumTransientRetries is < 0 or > 10)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(command),
+                "The maximum transient retry count must be between zero and ten.");
+        }
     }
 
     private sealed record CollectionAttempt(
         RawCollectionResult Result,
         bool Reused,
-        int ThrottleRetries);
+        int ThrottleRetries,
+        int TransientRetries = 0);
 }

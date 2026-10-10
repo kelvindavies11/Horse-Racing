@@ -241,7 +241,10 @@ while ((Get-SucceededMonthCount) -lt $monthCount) {
         $monthCount)
 
     if ($succeededMonths -lt $monthCount) {
-        Start-Sleep -Seconds ($ProbeIntervalMinutes * 60)
+        Write-Output (
+            '{0:o} The batch exhausted its bounded in-process retries; waiting 1 minute before checking readiness and resuming unfinished requests.' -f
+            [datetime]::UtcNow)
+        Start-Sleep -Seconds 60
     }
 }
 

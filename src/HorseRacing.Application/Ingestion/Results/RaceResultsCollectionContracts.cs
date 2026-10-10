@@ -115,7 +115,9 @@ public sealed record CollectRaceResultsHistoryCommand(
     bool ReuseSuccessfulPayloads = false,
     string? DispatchItemId = null,
     TimeSpan ThrottleRetryBaseDelay = default,
-    int MaximumThrottleRetries = 0);
+    int MaximumThrottleRetries = 0,
+    TimeSpan TransientRetryBaseDelay = default,
+    int MaximumTransientRetries = 0);
 
 public sealed record CollectRaceResultsHistoryResult(
     int FixturesFound,
@@ -124,5 +126,6 @@ public sealed record CollectRaceResultsHistoryResult(
     int PayloadsReused,
     int UnavailableResultPayloads,
     int ThrottleRetries,
+    int TransientRetries,
     int FailedCollections,
     IReadOnlyCollection<string> SuccessfulJobNames);

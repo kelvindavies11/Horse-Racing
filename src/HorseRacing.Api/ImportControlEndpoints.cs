@@ -86,7 +86,7 @@ public sealed class ImportControlService
         @"^(?<timestamp>\S+)\s+BHA API readiness probe returned (?<reason>.+); refreshing the public token and retrying in one minute\.$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
     private static readonly Regex BatchRetryLogPattern = new(
-        @"^(?<timestamp>\S+)\s+Available-results batch exited (?<exitCode>\d+); waiting (?<minutes>\d+) minutes before retrying only unfinished requests\.$",
+        @"^(?<timestamp>\S+)\s+(?:Available-results batch exited \d+ after its bounded in-process retries; waiting|The batch exhausted its bounded in-process retries; waiting) (?<minutes>\d+) minute(?:s)? before checking readiness and (?:retrying|resuming) (?:only )?unfinished requests\.$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     private static readonly JsonSerializerOptions ProcessJsonOptions = new()

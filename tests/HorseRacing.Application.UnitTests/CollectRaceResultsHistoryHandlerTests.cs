@@ -33,6 +33,7 @@ public sealed class CollectRaceResultsHistoryHandlerTests
         Assert.Equal(4, result.PayloadsReused);
         Assert.Equal(0, result.UnavailableResultPayloads);
         Assert.Equal(0, result.ThrottleRetries);
+        Assert.Equal(0, result.TransientRetries);
         Assert.Equal(0, result.FailedCollections);
         Assert.Empty(client.Requests);
         Assert.Empty(repository.Starts);
@@ -55,6 +56,7 @@ public sealed class CollectRaceResultsHistoryHandlerTests
         Assert.Equal(0, result.PayloadsReused);
         Assert.Equal(1, result.UnavailableResultPayloads);
         Assert.Equal(0, result.ThrottleRetries);
+        Assert.Equal(0, result.TransientRetries);
         Assert.Equal(0, result.FailedCollections);
         Assert.Equal(4, client.Requests.Count);
         Assert.All(repository.Starts, start => Assert.Equal("year-2023:2023-08", start.DispatchItemId));
@@ -117,6 +119,81 @@ public sealed class CollectRaceResultsHistoryHandlerTests
         Assert.Contains(
             client.Requests,
             uri => uri.AbsolutePath.EndsWith("/races/202/results", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Retries_an_audited_transient_failure_and_continues_the_batch()
+    {
+        var interpreter = new StubInterpreter(twoRaces: true);
+        var repository = new RecordingRepository();
+        var firstRaceAttempts = 0;
+        var client = new RecordingSourceClient(uri =>
+        {
+            if (uri.AbsolutePath.EndsWith("/races/201/results", StringComparison.Ordinal)
+                && firstRaceAttempts++ == 0)
+            {
+                throw new HttpRequestException("Temporary connection failure");
+            }
+
+            return Success(uri);
+        });
+        var handler = CreateHandler(client, interpreter, repository);
+
+        var command = CreateCommand() with
+        {
+            TransientRetryBaseDelay = TimeSpan.Zero,
+            MaximumTransientRetries = 1
+        };
+        var result = await handler.HandleAsync(command, CancellationToken.None);
+
+        Assert.Equal(2, result.ResultPayloadsCollected);
+        Assert.Equal(1, result.TransientRetries);
+        Assert.Equal(0, result.FailedCollections);
+        Assert.Equal(6, client.Requests.Count);
+        Assert.Contains(repository.Finishes, item =>
+            item.Completion.Outcome == RawCollectionOutcome.Failed
+            && item.Completion.ErrorCode == "source_request_failed");
+    }
+
+    [Fact]
+    public async Task Stops_after_an_authentication_failure_without_burning_the_remaining_queue()
+    {
+        var interpreter = new StubInterpreter(twoRaces: true);
+        var repository = new RecordingRepository();
+        var client = new RecordingSourceClient(uri =>
+            uri.AbsolutePath.EndsWith("/races/201/results", StringComparison.Ordinal)
+                ? Response(uri, 401, "Unauthorized")
+                : Success(uri));
+        var handler = CreateHandler(client, interpreter, repository);
+
+        var result = await handler.HandleAsync(CreateCommand(), CancellationToken.None);
+
+        Assert.Equal(1, result.FailedCollections);
+        Assert.DoesNotContain(
+            client.Requests,
+            uri => uri.AbsolutePath.EndsWith("/races/202/results", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Reports_a_deferred_failed_queue_item_until_it_is_ready_to_retry()
+    {
+        var interpreter = new StubInterpreter();
+        var repository = new RecordingRepository();
+        repository.AddSuccessful("bha-racecourses-api", interpreter.CreateRacecoursesUri());
+        repository.AddSuccessful("bha-results-fixtures-2023-08-p1", interpreter.CreateFixturePageUri(2023, 8, 1));
+        repository.AddSuccessful(
+            "bha-results-races-2023-101",
+            interpreter.CreateFixtureRacesUri(StubInterpreter.Fixture));
+        var client = new RecordingSourceClient(uri => Response(uri, 503, "Service Unavailable"));
+        var queue = new RecordingWorkQueue();
+        var handler = CreateHandler(client, interpreter, repository, queue);
+
+        var first = await handler.HandleAsync(CreateCommand(reuse: true), CancellationToken.None);
+        var second = await handler.HandleAsync(CreateCommand(reuse: true), CancellationToken.None);
+
+        Assert.Equal(1, first.FailedCollections);
+        Assert.Equal(1, second.FailedCollections);
+        Assert.Single(client.Requests);
     }
 
     [Fact]

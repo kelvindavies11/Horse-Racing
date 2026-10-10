@@ -185,7 +185,9 @@ foreach ($month in $months) {
     }
 
     $isSameRangeRetry = $attemptedRanges.Contains("$($month.From)|$($month.To)")
-    $reuseSuccessful = $month.IsFinal -or $isSameRangeRetry
+    $hasPriorSuccessfulCoverage = $successfulCoverage.ContainsKey($month.From)
+    $reuseSuccessful = -not $hasPriorSuccessfulCoverage -and
+        ($isSameRangeRetry -or $month.IsFinal)
     $month | Add-Member -NotePropertyName ReuseSuccessful -NotePropertyValue $reuseSuccessful
     $pendingMonths.Add($month)
 }

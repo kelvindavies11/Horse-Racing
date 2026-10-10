@@ -48,6 +48,16 @@ var options = new RaceDataSyncOptions
         syncConfiguration["MaximumThrottleRetries"],
         out var configuredThrottleRetries)
         ? Math.Clamp(configuredThrottleRetries, 0, 10)
+        : 3,
+    TransientRetryBaseDelaySeconds = int.TryParse(
+        syncConfiguration["TransientRetryBaseDelaySeconds"],
+        out var configuredTransientDelay)
+        ? Math.Clamp(configuredTransientDelay, 1, 600)
+        : 60,
+    MaximumTransientRetries = int.TryParse(
+        syncConfiguration["MaximumTransientRetries"],
+        out var configuredTransientRetries)
+        ? Math.Clamp(configuredTransientRetries, 0, 10)
         : 3
 };
 
@@ -112,17 +122,20 @@ try
                 reuseSuccessfulPayloads,
                 dispatchItemId,
                 TimeSpan.FromMinutes(options.ThrottleRetryBaseDelayMinutes),
-                options.MaximumThrottleRetries),
+                options.MaximumThrottleRetries,
+                TimeSpan.FromSeconds(options.TransientRetryBaseDelaySeconds),
+                options.MaximumTransientRetries),
             shutdown.Token);
         logger.LogInformation(
             "Raw collection found {Fixtures} fixtures and {Races} races, captured {Results} new result payloads, " +
-            "reused {Reused} existing payloads, observed {Unavailable} unavailable results, recovered from {ThrottleRetries} throttled attempts, and had {Failures} failed requests.",
+            "reused {Reused} existing payloads, observed {Unavailable} unavailable results, recovered from {ThrottleRetries} throttled attempts and {TransientRetries} transient failures, and had {Failures} failed requests.",
             collection.FixturesFound,
             collection.RacesFound,
             collection.ResultPayloadsCollected,
             collection.PayloadsReused,
             collection.UnavailableResultPayloads,
             collection.ThrottleRetries,
+            collection.TransientRetries,
             collection.FailedCollections);
         failures += collection.FailedCollections;
     }
@@ -242,4 +255,6 @@ internal sealed class RaceDataSyncOptions
     public int WeatherDelayBetweenRequestsMilliseconds { get; init; } = 1_000;
     public int ThrottleRetryBaseDelayMinutes { get; init; } = 15;
     public int MaximumThrottleRetries { get; init; } = 3;
+    public int TransientRetryBaseDelaySeconds { get; init; } = 60;
+    public int MaximumTransientRetries { get; init; } = 3;
 }

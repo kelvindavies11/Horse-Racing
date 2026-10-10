@@ -14,10 +14,15 @@ contract. It changes request scheduling, restart recovery and downstream pipelin
 - issue one HTTP attempt per audited Raw collection attempt;
 - persist an HTTP 429 response before applying a 15, 30, then 60 minute cooldown;
 - retry the same item after the cooldown and continue the batch when it succeeds;
+- classify request timeouts separately and retry timeouts, network failures, HTTP 408 and
+  HTTP 5xx responses after bounded 1, 2 and 4 minute delays;
+- stop on the first HTTP 401 or 403 so the supervisor can refresh the public token without
+  spending the remaining queue against an expired credential;
 - retain successful-payload reuse for process restarts;
 - persist fixture-expansion and race-result work in `raw.result_work_queue`;
 - claim missing race results before more fixture-expansion work;
-- cache result `404` responses for 24 hours and failed work for 15 minutes;
+- cache result `404` responses for 24 hours and terminal failed work for one minute after
+  the bounded in-process retries are exhausted;
 - refresh a partial month's fixture index while reusing completed child payloads;
 - run serialized Curated checkpoints and one-second Open-Meteo weather work alongside
   the independently gated BHA collector.
@@ -110,7 +115,10 @@ The implementation makes these source changes:
   retries.
 - `CollectRaceResultsHistoryHandler` records a 429, waits using bounded exponential
   cooldowns, retries the same URL through the normal Raw path, and continues the batch.
-- the sync summary reports recovered throttle attempts separately from terminal failures.
+- the handler also records and retries transient transport/timeout/408/5xx failures, while
+  authentication failures stop immediately;
+- the sync summary reports recovered throttle and transient attempts separately from
+  terminal failures.
 - a durable queue records Pending, Running, Succeeded, Unavailable and Failed work with
   Raw run/payload lineage; five-minute stale claims are recovered transactionally with
   `FOR UPDATE SKIP LOCKED`;
@@ -123,8 +131,10 @@ Automated verification covers both layers:
 
 - an application test returns 429 once, verifies the failed Raw attempt was persisted,
   retries successfully, and confirms the following race is still collected;
+- application tests cover timeout classification, transient recovery, immediate auth
+  failure stopping, and unresolved deferred failures remaining visible to the supervisor;
 - an infrastructure test verifies that a 429 causes exactly one HTTP call in the client;
-- all Application tests pass (14/14), including partial-month child reuse and 404 caching;
+- all Application tests pass (18/18), including partial-month child reuse and 404 caching;
 - all Infrastructure tests pass (187/187);
 - all Domain tests pass (18/18);
 - all web application tests pass (9/9);

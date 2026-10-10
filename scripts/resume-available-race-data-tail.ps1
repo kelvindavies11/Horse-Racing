@@ -190,11 +190,10 @@ while ($true) {
     }
 
     Write-Output (
-        '{0:o} Available-results batch exited {1}; waiting {2} minutes before retrying only unfinished requests.' -f
+        '{0:o} Available-results batch exited {1} after its bounded in-process retries; waiting 1 minute before checking readiness and retrying only unfinished requests.' -f
         [datetime]::UtcNow,
-        $runnerExitCode,
-        $ProbeIntervalMinutes)
-    Start-Sleep -Seconds ($ProbeIntervalMinutes * 60)
+        $runnerExitCode)
+    Start-Sleep -Seconds 60
 
     $bhaToken = Get-PublicBhaToken
     $env:BhaCollection__RacingStatusApiBearerToken = $bhaToken

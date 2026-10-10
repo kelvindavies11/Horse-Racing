@@ -57,6 +57,26 @@ public sealed class CollectRawSourceHandler(
                 "Collection was cancelled.");
             throw;
         }
+        catch (OperationCanceledException exception)
+        {
+            const string timeoutErrorCode = "source_timeout";
+            var timeoutErrorMessage = string.IsNullOrWhiteSpace(exception.Message)
+                ? "The source request timed out."
+                : exception.Message;
+            await FinishWithoutPayloadAsync(
+                runId,
+                RawCollectionOutcome.Failed,
+                timeoutErrorCode,
+                timeoutErrorMessage);
+
+            return new RawCollectionResult(
+                runId,
+                RawCollectionOutcome.Failed,
+                null,
+                null,
+                timeoutErrorCode,
+                timeoutErrorMessage);
+        }
         catch (Exception exception)
         {
             await FinishWithoutPayloadAsync(
