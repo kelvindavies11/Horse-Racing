@@ -17,12 +17,11 @@ import type {
   JsonValue,
   PromotionRunAudit,
   RawRunAudit,
-  RelationshipGraph,
-  RelationshipNode,
+  RaceResultsFeed,
   RunnerResultView,
 } from "./domain/curated";
 import { curatedRepository } from "./data/curatedRepository";
-import { useAudit, useCuratedData, useImportControl, useRaceCalendar, useRaceResults } from "./hooks/useCuratedData";
+import { useAudit, useCuratedData, useImportControl, useRaceCalendar, useRaceResults, useWinnerInsights } from "./hooks/useCuratedData";
 
 type AppView = "results" | "calendar" | "explore" | "patterns" | "admin" | "imports";
 type AuditTab = "raw" | "curated";
@@ -144,6 +143,7 @@ const currentView = (): AppView => {
 
 function App() {
   const [view, setView] = useState<AppView>(currentView);
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [type, setType] = useState("");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -153,6 +153,7 @@ function App() {
   const audit = useAudit(view === "admin");
   const imports = useImportControl(view === "imports");
   const results = useRaceResults(view === "results");
+  const winnerInsights = useWinnerInsights(view === "patterns");
   const calendar = useRaceCalendar(view === "calendar");
 
   const navigate = (nextView: AppView) => {
@@ -165,13 +166,19 @@ function App() {
     if (view === "admin") audit.reload();
     else if (view === "imports") imports.reload();
     else if (view === "calendar") calendar.reload();
+    else if (view === "patterns") winnerInsights.reload();
     else if (view === "results") results.reload();
     else curated.reload();
   };
 
   return (
     <div className="app-shell">
-      <Sidebar view={view} onNavigate={navigate} />
+      <Sidebar
+        view={view}
+        isExpanded={isSidebarExpanded}
+        onNavigate={navigate}
+        onToggle={() => setIsSidebarExpanded((current) => !current)}
+      />
       <main className="main-content">
         <header className="topbar">
           <div className="mobile-brand"><span className="brand-mark">P</span><strong>Paddock</strong></div>
@@ -182,7 +189,7 @@ function App() {
         {view === "results" && <ResultsPage {...results} />}
         {view === "calendar" && <CalendarPage {...calendar} />}
         {view === "explore" && <ExplorerPage {...curated} type={type} query={query} page={page} onTypeChange={(value) => { setType(value); setPage(1); }} onQueryChange={(value) => { setQuery(value); setPage(1); }} onPageChange={setPage} onSelect={setSelectedEntity} />}
-        {view === "patterns" && <PatternsPage graph={curated.relationships} isLoading={curated.isLoading} error={curated.error} onRetry={curated.reload} />}
+        {view === "patterns" && <PatternsPage {...winnerInsights} />}
         {view === "admin" && <AdminPage {...audit} />}
         {view === "imports" && <ImportControlPage {...imports} />}
       </main>
@@ -191,18 +198,35 @@ function App() {
   );
 }
 
-const Sidebar = ({ view, onNavigate }: { view: AppView; onNavigate: (view: AppView) => void }) => (
-  <aside className="sidebar">
-    <button className="brand" type="button" onClick={() => onNavigate("results")}><span className="brand-mark">P</span><span><strong>Paddock</strong><small>Data observatory</small></span></button>
+const Sidebar = ({ view, isExpanded, onNavigate, onToggle }: {
+  view: AppView;
+  isExpanded: boolean;
+  onNavigate: (view: AppView) => void;
+  onToggle: () => void;
+}) => (
+  <aside
+    id="primary-sidebar"
+    className={isExpanded ? "sidebar sidebar--expanded" : "sidebar sidebar--collapsed"}
+    data-testid="primary-sidebar"
+  >
+    <button className="brand" type="button" aria-label={isExpanded ? undefined : "Paddock home"} onClick={() => onNavigate("results")}><span className="brand-mark">P</span><span><strong>Paddock</strong><small>Data observatory</small></span></button>
+    <button
+      className="sidebar-toggle"
+      type="button"
+      aria-label={isExpanded ? "Collapse side menu" : "Expand side menu"}
+      aria-controls="primary-sidebar"
+      aria-expanded={isExpanded}
+      onClick={onToggle}
+    ><ChevronIcon left={isExpanded} /></button>
     <nav className="primary-nav" aria-label="Primary navigation">
       <p className="nav-label">Workspace</p>
-      <button className={view === "results" ? "nav-item active" : "nav-item"} type="button" onClick={() => onNavigate("results")}><TrophyIcon /><span>Race results</span><small>01</small></button>
-      <button className={view === "calendar" ? "nav-item active" : "nav-item"} type="button" onClick={() => onNavigate("calendar")}><CalendarIcon /><span>Calendar</span><small>02</small></button>
-      <button className={view === "explore" ? "nav-item active" : "nav-item"} type="button" onClick={() => onNavigate("explore")}><CompassIcon /><span>Explore</span><small>03</small></button>
-      <button className={view === "patterns" ? "nav-item active" : "nav-item"} type="button" onClick={() => onNavigate("patterns")}><NodesIcon /><span>Patterns</span><small>04</small></button>
+      <button className={view === "results" ? "nav-item active" : "nav-item"} type="button" aria-label="Race results" title={isExpanded ? undefined : "Race results"} onClick={() => onNavigate("results")}><TrophyIcon /><span>Race results</span><small>01</small></button>
+      <button className={view === "calendar" ? "nav-item active" : "nav-item"} type="button" aria-label="Calendar" title={isExpanded ? undefined : "Calendar"} onClick={() => onNavigate("calendar")}><CalendarIcon /><span>Calendar</span><small>02</small></button>
+      <button className={view === "explore" ? "nav-item active" : "nav-item"} type="button" aria-label="Explore" title={isExpanded ? undefined : "Explore"} onClick={() => onNavigate("explore")}><CompassIcon /><span>Explore</span><small>03</small></button>
+      <button className={view === "patterns" ? "nav-item active" : "nav-item"} type="button" aria-label="Patterns" title={isExpanded ? undefined : "Patterns"} onClick={() => onNavigate("patterns")}><NodesIcon /><span>Patterns</span><small>04</small></button>
       <p className="nav-label nav-label--admin">Operations</p>
-      <button className={view === "admin" ? "nav-item active" : "nav-item"} type="button" onClick={() => onNavigate("admin")}><ShieldIcon /><span>Admin audit</span><small>05</small></button>
-      <button className={view === "imports" ? "nav-item active" : "nav-item"} type="button" onClick={() => onNavigate("imports")}><QueueIcon /><span>Import control</span><small>06</small></button>
+      <button className={view === "admin" ? "nav-item active" : "nav-item"} type="button" aria-label="Admin audit" title={isExpanded ? undefined : "Admin audit"} onClick={() => onNavigate("admin")}><ShieldIcon /><span>Admin audit</span><small>05</small></button>
+      <button className={view === "imports" ? "nav-item active" : "nav-item"} type="button" aria-label="Import control" title={isExpanded ? undefined : "Import control"} onClick={() => onNavigate("imports")}><QueueIcon /><span>Import control</span><small>06</small></button>
     </nav>
     <div className="sidebar-foot"><div className="layer-card"><span><DatabaseIcon /></span><div><strong>Curated layer</strong><small>Read-only · PostgreSQL</small></div></div><p>Source → Raw → Curated<br />Local pipeline / UK</p></div>
   </aside>
@@ -569,58 +593,133 @@ const EntityDrawer = ({ entity, onNavigate, onClose }: { entity: CuratedEntity; 
 const Property = ({ name, value }: { name: string; value: JsonValue }) => { const complex = typeof value === "object" && value !== null; return <div className={complex ? "property complex" : "property"}><span>{titleCase(name)}</span><strong>{complex ? JSON.stringify(value) : value === null ? "—" : String(value)}</strong></div>; };
 const LineagePoint = ({ title, value, active = false }: { title: string; value: string; active?: boolean }) => <div className={active ? "lineage-point active" : "lineage-point"}><i /><span><small>{title}</small><strong>{value}</strong></span></div>;
 
-const PatternsPage = ({ graph, isLoading, error, onRetry }: { graph?: RelationshipGraph; isLoading: boolean; error?: string; onRetry: () => void }) => {
-  const hubs = useMemo(() => getHubs(graph), [graph]);
-  const patternPages = useClientPagination(graph?.patterns ?? [], 8);
-  const hubPages = useClientPagination(hubs, 12);
-  const [selectedHubId, setSelectedHubId] = useState<string>();
-  const selected = hubPages.pageItems.find((hub) => hub.node.id === selectedHubId) ?? hubPages.pageItems[0];
-  const maxPattern = Math.max(...(graph?.patterns.map((pattern) => pattern.count) ?? [1]));
+type WinnerDimension = "jockeyName" | "trainerName" | "ownerName";
+
+interface WinnerObservation {
+  race: CuratedRaceResult;
+  winner: RunnerResultView;
+}
+
+interface ConnectionInsight {
+  name: string;
+  wins: number;
+  starts: number;
+  strikeRate: number;
+}
+
+const dimensionLabels: Record<WinnerDimension, string> = {
+  jockeyName: "Jockey",
+  trainerName: "Trainer",
+  ownerName: "Owner",
+};
+
+const raceWinner = (race: CuratedRaceResult) => race.runners.find((runner) => runner.finishPosition === 1)
+  ?? race.runners.find((runner) => runner.horseName === race.winner);
+
+const topCount = (values: Array<string | null | undefined>) => {
+  const counts = new Map<string, number>();
+  values.filter((value): value is string => Boolean(value?.trim())).forEach((value) => counts.set(value, (counts.get(value) ?? 0) + 1));
+  return [...counts].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))[0]?.[0] ?? "Not recorded";
+};
+
+const connectionInsights = (data: RaceResultsFeed, observations: WinnerObservation[], dimension: WinnerDimension): ConnectionInsight[] => {
+  const starts = new Map<string, number>();
+  data.items.flatMap((race) => race.runners).filter((runner) => !/non.?runner/i.test(runner.status)).forEach((runner) => {
+    const name = runner[dimension]?.trim();
+    if (name) starts.set(name, (starts.get(name) ?? 0) + 1);
+  });
+  const wins = new Map<string, number>();
+  observations.forEach(({ winner }) => {
+    const name = winner[dimension]?.trim();
+    if (name) wins.set(name, (wins.get(name) ?? 0) + 1);
+  });
+  return [...wins].map(([name, count]) => ({
+    name,
+    wins: count,
+    starts: starts.get(name) ?? count,
+    strikeRate: count / Math.max(starts.get(name) ?? count, 1),
+  })).sort((left, right) => right.wins - left.wins || right.strikeRate - left.strikeRate || left.name.localeCompare(right.name));
+};
+
+const PatternsPage = ({ data, isLoading, error, reload }: ReturnType<typeof useWinnerInsights>) => {
+  const [dimension, setDimension] = useState<WinnerDimension>("jockeyName");
+  const observations = useMemo(() => (data?.items ?? []).flatMap((race) => {
+    const winner = raceWinner(race);
+    return winner ? [{ race, winner }] : [];
+  }), [data]);
+  const connections = useMemo(() => data ? connectionInsights(data, observations, dimension) : [], [data, observations, dimension]);
+  const maxWins = Math.max(...connections.map((item) => item.wins), 1);
+  const courses = useMemo(() => {
+    const grouped = new Map<string, WinnerObservation[]>();
+    observations.forEach((observation) => grouped.set(observation.race.courseName, [...(grouped.get(observation.race.courseName) ?? []), observation]));
+    return [...grouped].map(([courseName, rows]) => ({
+      courseName,
+      races: rows.length,
+      averageField: rows.reduce((total, row) => total + row.race.runners.filter((runner) => !/non.?runner/i.test(runner.status)).length, 0) / rows.length,
+      leadingJockey: topCount(rows.map((row) => row.winner.jockeyName)),
+      leadingTrainer: topCount(rows.map((row) => row.winner.trainerName)),
+      commonGoing: topCount(rows.map((row) => row.race.going)),
+    })).sort((left, right) => right.races - left.races || left.courseName.localeCompare(right.courseName));
+  }, [observations]);
+  const weather = useMemo(() => {
+    const grouped = new Map<string, WinnerObservation[]>();
+    observations.filter((row) => row.race.weather).forEach((row) => {
+      const condition = weatherLabel(row.race.weather!.weatherCode);
+      grouped.set(condition, [...(grouped.get(condition) ?? []), row]);
+    });
+    return [...grouped].map(([condition, rows]) => ({
+      condition,
+      races: rows.length,
+      averageTemperature: rows.reduce((total, row) => total + row.race.weather!.temperatureC, 0) / rows.length,
+      averageWind: rows.reduce((total, row) => total + row.race.weather!.windSpeedKilometresPerHour, 0) / rows.length,
+      leadingJockey: topCount(rows.map((row) => row.winner.jockeyName)),
+      commonGoing: topCount(rows.map((row) => row.race.going)),
+    })).sort((left, right) => right.races - left.races || left.condition.localeCompare(right.condition));
+  }, [observations]);
+
   return (
-    <div className="page-wrap">
+    <div className="page-wrap winner-patterns-page">
       <section className="hero hero--patterns">
-        <div><p className="kicker">Relationship signals / inferred</p><h1>Follow the<br /><em>connections.</em></h1></div>
-        <div className="hero-copy"><p>References inside curated records are matched to stable source keys and names, revealing the links already present in the BHA data.</p><span><i />Signals, not manufactured relationships</span></div>
+        <div><p className="kicker">Winner signals / recent results</p><h1>What wins,<br /><em>and where.</em></h1></div>
+        <div className="hero-copy"><p>Compare winning jockeys, trainers and owners, then place those results beside racecourse and observed weather conditions.</p><span><i />Observed outcomes · not causal claims</span></div>
       </section>
       {isLoading && <PageSkeleton />}
-      {!isLoading && error && <ApiError message={error} onRetry={onRetry} />}
-      {!isLoading && graph && (
+      {!isLoading && error && <ApiError message={error} onRetry={reload} />}
+      {!isLoading && data && (
         <>
-          <section className="metric-strip pattern-metrics">
-            <Metric value={number.format(graph.edges.length)} label="Entity links" note="In the latest 500 records" index="01" />
-            <Metric value={number.format(graph.patterns.length)} label="Type patterns" note="Distinct family pairings" index="02" />
-            <Metric value={number.format(hubs.length)} label="Connected entities" note="Records with at least one link" index="03" />
+          <section className="metric-strip pattern-metrics" aria-label="Winner insight coverage">
+            <Metric value={number.format(data.totalRaces)} label="Races analysed" note={`${data.fromDate} — ${data.toDate}`} index="01" />
+            <Metric value={number.format(observations.length)} label="Winners linked" note="Matched to declared runners" index="02" />
+            <Metric value={`${data.totalRaces === 0 ? 0 : Math.round((data.weatherEnrichedRaces / data.totalRaces) * 100)}%`} label="Weather coverage" note={`${data.weatherEnrichedRaces} race-hour observations`} index="03" />
           </section>
-          {graph.edges.length === 0 ? <NoRelationships /> : (
+          {observations.length === 0 ? <NoWinnerInsights /> : (
             <>
-              <section className="section-block">
-                <div className="section-heading"><div><p className="kicker">Pattern frequency</p><h2>Families that travel together</h2></div><p>Strongest inferred relationships in this sample.</p></div>
-                <div className="pattern-list">
-                  {patternPages.pageItems.map((pattern, index) => (
-                    <div className="pattern-row" key={`${pattern.sourceType}-${pattern.targetType}`}>
-                      <span>{String((patternPages.page - 1) * 8 + index + 1).padStart(2, "0")}</span>
-                      <strong style={typeStyle(pattern.sourceType)}><i />{pattern.sourceType}</strong>
-                      <ArrowIcon />
-                      <strong style={typeStyle(pattern.targetType)}><i />{pattern.targetType}</strong>
-                      <span className="pattern-bar"><i style={{ width: `${(pattern.count / maxPattern) * 100}%` }} /></span>
-                      <b>{pattern.count}</b>
-                    </div>
-                  ))}
+              <section className="section-block winner-connections">
+                <div className="section-heading winner-insight-heading"><div><p className="kicker">Winning connections</p><h2>Winner connections</h2></div><p>Wins and strike rate within the loaded results window.</p></div>
+                <div className="winner-dimension-tabs" role="group" aria-label="Winner connection type">
+                  {(Object.keys(dimensionLabels) as WinnerDimension[]).map((key) => <button type="button" key={key} aria-pressed={dimension === key} onClick={() => setDimension(key)}>{dimensionLabels[key]}</button>)}
                 </div>
-                <Pagination current={patternPages.page} total={patternPages.totalPages} onChange={patternPages.setPage} label="Relationship pattern pages" />
+                <div className="winner-leaderboard" role="table" aria-label={`${dimensionLabels[dimension]} winner insights`}>
+                  <div className="winner-row winner-row--head" role="row"><span>Rank</span><span>{dimensionLabels[dimension]}</span><span>Wins</span><span>Starts</span><span>Strike rate</span></div>
+                  {connections.slice(0, 12).map((item, index) => <div className="winner-row" role="row" key={item.name}>
+                    <span>{String(index + 1).padStart(2, "0")}</span><strong>{item.name}</strong><b>{item.wins}</b><span>{item.starts}</span><span className="winner-rate"><i style={{ width: `${(item.wins / maxWins) * 100}%` }} /><b>{Math.round(item.strikeRate * 100)}%</b></span>
+                  </div>)}
+                </div>
               </section>
-              <section className="section-block connection-browser">
-                <div className="section-heading"><div><p className="kicker">Connection browser</p><h2>Explore the hubs</h2></div><p>Select an entity to inspect its immediate neighbourhood.</p></div>
-                <div className="connection-layout">
-                  <div className="hub-list">
-                    {hubPages.pageItems.map((hub) => (
-                      <button type="button" key={hub.node.id} className={selected?.node.id === hub.node.id ? "hub-item selected" : "hub-item"} onClick={() => setSelectedHubId(hub.node.id)} style={typeStyle(hub.node.type)}>
-                        <i /><span><strong>{hub.node.displayName}</strong><small>{hub.node.type}</small></span><b>{hub.neighbours.length}</b>
-                      </button>
-                    ))}
-                    <Pagination current={hubPages.page} total={hubPages.totalPages} onChange={hubPages.setPage} label="Connection hub pages" compact />
-                  </div>
-                  {selected && <Neighbourhood hub={selected.node} neighbours={selected.neighbours} />}
+              <section className="section-block">
+                <div className="section-heading"><div><p className="kicker">Venue context</p><h2>Racecourse profiles</h2></div><p>Who won, field size and the most common going at each course.</p></div>
+                <div className="winner-context-grid">
+                  {courses.slice(0, 8).map((course) => <article className="winner-context-card" key={course.courseName}>
+                    <span>{course.races} {course.races === 1 ? "race" : "races"}</span><h3>{course.courseName}</h3>
+                    <dl><div><dt>Leading jockey</dt><dd>{course.leadingJockey}</dd></div><div><dt>Leading trainer</dt><dd>{course.leadingTrainer}</dd></div><div><dt>Average field</dt><dd>{course.averageField.toFixed(1)}</dd></div><div><dt>Common going</dt><dd>{course.commonGoing}</dd></div></dl>
+                  </article>)}
+                </div>
+              </section>
+              <section className="section-block weather-insights">
+                <div className="section-heading"><div><p className="kicker">Race-hour context</p><h2>Weather around winners</h2></div><p>Observed conditions at scheduled start time, grouped without implying causation.</p></div>
+                <div className="weather-insight-table" role="table" aria-label="Winner weather insights">
+                  <div className="weather-insight-row weather-insight-row--head" role="row"><span>Condition</span><span>Races</span><span>Average temp.</span><span>Average wind</span><span>Leading jockey</span><span>Common going</span></div>
+                  {weather.map((item) => <div className="weather-insight-row" role="row" key={item.condition}><strong>{item.condition}</strong><span>{item.races}</span><span>{item.averageTemperature.toFixed(1)}°C</span><span>{item.averageWind.toFixed(1)} km/h</span><span>{item.leadingJockey}</span><span>{item.commonGoing}</span></div>)}
                 </div>
               </section>
             </>
@@ -629,17 +728,6 @@ const PatternsPage = ({ graph, isLoading, error, onRetry }: { graph?: Relationsh
       )}
     </div>
   );
-};
-
-const getHubs = (graph?: RelationshipGraph) => {
-  if (!graph) return [];
-  const nodes = new Map(graph.nodes.map((node) => [node.id, node]));
-  return graph.nodes.map((node) => ({ node, neighbours: graph.edges.flatMap((edge) => { if (edge.sourceId === node.id && nodes.has(edge.targetId)) return [{ node: nodes.get(edge.targetId)!, label: edge.label }]; if (edge.targetId === node.id && nodes.has(edge.sourceId)) return [{ node: nodes.get(edge.sourceId)!, label: edge.label }]; return []; }) })).filter((hub) => hub.neighbours.length > 0).sort((left, right) => right.neighbours.length - left.neighbours.length);
-};
-
-const Neighbourhood = ({ hub, neighbours }: { hub: RelationshipNode; neighbours: { node: RelationshipNode; label: string }[] }) => {
-  const pages = useClientPagination(neighbours, 8, hub.id);
-  return <div className="neighbourhood"><div className="hub-focus" style={typeStyle(hub.type)}><span className="orbit orbit-one" /><span className="orbit orbit-two" /><i /><small>{hub.type}</small><strong>{hub.displayName}</strong><span>{neighbours.length} direct {neighbours.length === 1 ? "link" : "links"}</span></div><div className="neighbour-list">{pages.pageItems.map(({ node, label }) => <div className="neighbour" key={node.id} style={typeStyle(node.type)}><span className="link-line"><i /></span><span className="neighbour-dot" /><div><small>{label} · {node.type}</small><strong>{node.displayName}</strong></div></div>)}<Pagination current={pages.page} total={pages.totalPages} onChange={pages.setPage} label="Neighbour pages" compact /></div></div>;
 };
 
 const ImportControlPage = ({
@@ -844,7 +932,7 @@ const ApiError = ({ message, onRetry }: { message: string; onRetry: () => void }
 const InlineError = ({ message }: { message: string }) => <div className="inline-error" role="alert"><AlertIcon /><span><strong>Records could not be loaded.</strong>{message}</span></div>;
 const EmptyCollection = () => <section className="empty-collection"><span><DatabaseIcon /></span><p className="kicker">Curated layer is ready</p><h2>No promoted records yet.</h2><p>Collect a Raw payload, then run the promoter. This site intentionally remains empty until curated data exists.</p><div><code>dotnet run --project src/HorseRacing.Bha.RawCollector</code><code>dotnet run --project src/HorseRacing.Bha.CuratedPromoter</code></div></section>;
 const NoMatches = ({ onClear }: { onClear: () => void }) => <div className="no-matches"><SearchIcon /><h3>No curated entities match</h3><p>Try a broader name, source key, or entity family.</p><button type="button" onClick={onClear}>Clear filters</button></div>;
-const NoRelationships = () => <section className="empty-collection"><span><NodesIcon /></span><p className="kicker">No inferred links in this sample</p><h2>The entities are present, but their references do not meet yet.</h2><p>Links appear when a field such as horseId, fixtureId or trainerName matches another curated entity’s stable source key or display name.</p></section>;
+const NoWinnerInsights = () => <section className="empty-collection"><span><TrophyIcon /></span><p className="kicker">No completed winners in this window</p><h2>Winner insights need a declared result.</h2><p>The page will populate when the curated results include a runner matched to first place or the recorded winner name.</p></section>;
 const PageSkeleton = () => <div className="page-skeleton" aria-label="Loading curated data"><div className="skeleton-metrics"><i /><i /><i /></div><div className="skeleton-panel"><i /><i /><i /><i /></div></div>;
 const EntityGridSkeleton = () => <div className="entity-grid skeleton-grid" aria-label="Loading entities">{Array.from({ length: 6 }, (_, index) => <i key={index} />)}</div>;
 

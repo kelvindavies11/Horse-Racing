@@ -139,6 +139,54 @@ export const useRaceResults = (active: boolean) => {
   };
 };
 
+export const useWinnerInsights = (active: boolean) => {
+  const [reloadKey, setReloadKey] = useState(0);
+  const [data, setData] = useState<RaceResultsFeed>();
+  const [error, setError] = useState<string>();
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!active) return;
+    const controller = new AbortController();
+    setIsLoading(true);
+    setError(undefined);
+
+    curatedRepository
+      .getLatestRaceDate(controller.signal)
+      .then((latest) => {
+        const end = new Date(`${latest.date}T00:00:00Z`);
+        const start = new Date(end);
+        start.setUTCDate(start.getUTCDate() - 31);
+        return curatedRepository.getResults({
+          from: start.toISOString().slice(0, 10),
+          to: latest.date,
+          signal: controller.signal,
+        });
+      })
+      .then((value) => {
+        if (!controller.signal.aborted) {
+          setData(value);
+          setIsLoading(false);
+        }
+      })
+      .catch((caught: unknown) => {
+        if (!controller.signal.aborted) {
+          setError(messageFor(caught));
+          setIsLoading(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [active, reloadKey]);
+
+  return {
+    data,
+    error,
+    isLoading,
+    reload: useCallback(() => setReloadKey((value) => value + 1), []),
+  };
+};
+
 export const useImportControl = (active: boolean) => {
   const [reloadKey, setReloadKey] = useState(0);
   const [data, setData] = useState<ImportControlSnapshot>();

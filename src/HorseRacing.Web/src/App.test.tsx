@@ -376,13 +376,50 @@ describe("curated data workspace", () => {
     expect(screen.getByRole("button", { name: "RunnerResult1" })).toBeInTheDocument();
   });
 
-  it("shows inferred patterns and the admin job audit", async () => {
+  it("starts with the side menu collapsed and lets the user expand or collapse it", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const sidebar = screen.getByTestId("primary-sidebar");
+    const expand = screen.getByRole("button", { name: "Expand side menu" });
+    expect(sidebar).toHaveClass("sidebar--collapsed");
+    expect(expand).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: "Race results" })).toHaveAttribute("title", "Race results");
+
+    await user.click(expand);
+
+    expect(sidebar).toHaveClass("sidebar--expanded");
+    const collapse = screen.getByRole("button", { name: "Collapse side menu" });
+    expect(collapse).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Race results" })).not.toHaveAttribute("title");
+
+    await user.click(collapse);
+    expect(sidebar).toHaveClass("sidebar--collapsed");
+  });
+
+  it("shows winner insights across connections, courses and weather, then the admin job audit", async () => {
     const user = userEvent.setup();
     render(<App />);
     await screen.findByRole("heading", { name: "Observed records" });
     await user.click(screen.getByRole("button", { name: /Patterns/i }));
-    expect(await screen.findByRole("heading", { name: "Families that travel together" })).toBeInTheDocument();
-    expect(screen.getAllByText("Jane Rider").length).toBeGreaterThan(0);
+    expect(await screen.findByRole("heading", { name: "Winner connections" })).toBeInTheDocument();
+    const jockeyInsights = screen.getByRole("table", { name: "Jockey winner insights" });
+    expect(within(jockeyInsights).getByText("Kevin Stott")).toBeInTheDocument();
+    expect(within(jockeyInsights).getByText("Hollie Doyle")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Racecourse profiles" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Nottingham" })).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Winner weather insights" })).toBeInTheDocument();
+    expect(screen.getByText("Clear")).toBeInTheDocument();
+    expect(screen.getByText("Cloudy")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Trainer" }));
+    expect(screen.getByRole("table", { name: "Trainer winner insights" })).toBeInTheDocument();
+    expect(screen.getAllByText("Kevin Ryan").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Archie Watson").length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole("button", { name: "Owner" }));
+    expect(screen.getByRole("table", { name: "Owner winner insights" })).toBeInTheDocument();
+    expect(screen.getByText("Caelum Partners")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Admin audit/i }));
     expect(await screen.findByRole("heading", { name: "Latest job activity" })).toBeInTheDocument();
