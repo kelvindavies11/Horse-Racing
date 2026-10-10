@@ -97,7 +97,11 @@ https://api09.horseracing.software/bha/v1/championships/owners[?type={flat-or-ju
 
 The BHA website pages are publicly readable. Its current `robots.txt` does not disallow
 these public page paths and specifies `crawl-delay: 10`; the configured minimum interval
-for every enabled source therefore cannot be less than ten seconds. Each process performs
+for every source enabled in this general-purpose Raw collector therefore cannot be less
+than ten seconds. The separate `RaceDataSync` historical-results workflow has a controlled
+nine-second trial only for the `api09.horseracing.software` JSON host, whose `robots.txt`
+does not publish a crawl delay; it falls back to ten seconds after an HTTP 418 or 429.
+Each process performs
 one request per enabled source and has no concurrent fetches or automatic retries. The
 default timeout is 30 seconds. The default response limits are 5 MB for website pages and
 calendar feeds, 10 MB for the racecourses API, and 20 MB for the fixtures API and fixture

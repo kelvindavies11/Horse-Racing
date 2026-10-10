@@ -10,7 +10,10 @@ followed by failed monthly jobs and supervisor restarts.
 The selected design keeps the existing BHA endpoints and the existing immutable Raw
 contract. It changes request scheduling, restart recovery and downstream pipelining:
 
-- start requests no more frequently than once every 10 seconds across all workers;
+- start BHA JSON API requests no more frequently than once every 9 seconds across all
+  workers during the controlled trial;
+- switch the active monthly worker to the conservative 10-second interval after its first
+  audited HTTP 418 or 429 response;
 - issue one HTTP attempt per audited Raw collection attempt;
 - persist an HTTP 429 response before applying a 15, 30, then 60 minute cooldown;
 - retry the same item after the cooldown and continue the batch when it succeeds;
@@ -94,13 +97,13 @@ observed 2026 month in one response.
 
 ### Quota-aware continuous collection
 
-Selected. At one request every 10 seconds, the planned rate is 360 requests per hour. That
-is below the inferred boundary and matches the repository's documented minimum interval.
-Using the measured 4,262 distinct URLs, an uninterrupted pass is approximately 11 hours
-50 minutes. The old run took approximately 22 hours between its first and last audited
-attempt in the same window. The replay estimate is therefore about 46% less elapsed time,
-or 1.86 times the useful throughput, while also producing a complete audit for throttle
-attempts.
+Selected. The original conservative interval was one request every 10 seconds, or 360
+requests per hour. The controlled API-only trial starts at one request every 9 seconds, or
+400 requests per hour, while retaining one shared gate and automatically returning the
+active worker to 10 seconds after the first 418 or 429. Using the measured 4,262 distinct
+URLs, an uninterrupted throttle-free pass is approximately 10 hours 39 minutes rather
+than 11 hours 50 minutes at 10 seconds. Website-page collection remains at least 10
+seconds apart in accordance with the public website's robots policy.
 
 This is a replay estimate rather than a live BHA load test. A live comparison was avoided
 because the existing backfill was still running and additional traffic could have affected
@@ -110,7 +113,8 @@ both the source quota and the production measurement.
 
 The implementation makes these source changes:
 
-- `RaceDataSync` clamps its shared request interval to at least 10 seconds.
+- `RaceDataSync` clamps its shared BHA JSON API request interval to at least 9 seconds and
+  configures a 10-second throttle fallback interval.
 - `BhaHistoricalResultsApiClient` returns the first response instead of performing hidden
   retries.
 - `CollectRaceResultsHistoryHandler` records a 429, waits using bounded exponential
@@ -122,7 +126,7 @@ The implementation makes these source changes:
 - a durable queue records Pending, Running, Succeeded, Unavailable and Failed work with
   Raw run/payload lineage; five-minute stale claims are recovered transactionally with
   `FOR UPDATE SKIP LOCKED`;
-- orchestration uses one BHA worker at the ten-second cadence and maintains a separate
+- orchestration uses one BHA worker at the adaptive 9-to-10-second cadence and maintains a separate
   `weather-progress.csv`, allowing missing 2026 weather to be backfilled concurrently;
   weather completion is polled during Raw collection so the next weather month starts
   immediately instead of waiting for the active BHA month to finish.
@@ -134,7 +138,8 @@ Automated verification covers both layers:
 - application tests cover timeout classification, transient recovery, immediate auth
   failure stopping, and unresolved deferred failures remaining visible to the supervisor;
 - an infrastructure test verifies that a 429 causes exactly one HTTP call in the client;
-- all Application tests pass (18/18), including partial-month child reuse and 404 caching;
+- all Application tests pass (20/20), including adaptive 418/429 fallback, partial-month
+  child reuse and 404 caching;
 - all Infrastructure tests pass (187/187);
 - all Domain tests pass (18/18);
 - all web application tests pass (9/9);

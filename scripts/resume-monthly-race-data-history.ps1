@@ -14,8 +14,8 @@ param(
     [ValidateRange(1, 120)]
     [int] $ProbeIntervalMinutes = 15,
 
-    [ValidateRange(10000, 120000)]
-    [int] $RequestDelayMilliseconds = 10000,
+    [ValidateRange(9000, 120000)]
+    [int] $RequestDelayMilliseconds = 9000,
 
     [ValidateRange(1, 5)]
     [int] $MaxParallelism = 1

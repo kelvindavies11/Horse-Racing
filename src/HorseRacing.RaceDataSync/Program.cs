@@ -32,7 +32,12 @@ var options = new RaceDataSyncOptions
     DelayBetweenRequestsMilliseconds = int.TryParse(
         syncConfiguration["DelayBetweenRequestsMilliseconds"],
         out var configuredDelay)
-        ? Math.Clamp(configuredDelay, 10_000, 120_000)
+        ? Math.Clamp(configuredDelay, 9_000, 120_000)
+        : 9_000,
+    ThrottleFallbackRequestDelayMilliseconds = int.TryParse(
+        syncConfiguration["ThrottleFallbackRequestDelayMilliseconds"],
+        out var configuredThrottleFallbackDelay)
+        ? Math.Clamp(configuredThrottleFallbackDelay, 10_000, 120_000)
         : 10_000,
     WeatherDelayBetweenRequestsMilliseconds = int.TryParse(
         syncConfiguration["WeatherDelayBetweenRequestsMilliseconds"],
@@ -105,6 +110,13 @@ logger.LogInformation(
     fromDate,
     toDate,
     mode);
+if (mode is "all" or "raw")
+{
+    logger.LogInformation(
+        "BHA API request pacing starts at {InitialIntervalMilliseconds} ms and falls back to {FallbackIntervalMilliseconds} ms after the first HTTP 418 or 429 response.",
+        options.DelayBetweenRequestsMilliseconds,
+        options.ThrottleFallbackRequestDelayMilliseconds);
+}
 
 try
 {
@@ -124,7 +136,8 @@ try
                 TimeSpan.FromMinutes(options.ThrottleRetryBaseDelayMinutes),
                 options.MaximumThrottleRetries,
                 TimeSpan.FromSeconds(options.TransientRetryBaseDelaySeconds),
-                options.MaximumTransientRetries),
+                options.MaximumTransientRetries,
+                TimeSpan.FromMilliseconds(options.ThrottleFallbackRequestDelayMilliseconds)),
             shutdown.Token);
         logger.LogInformation(
             "Raw collection found {Fixtures} fixtures and {Races} races, captured {Results} new result payloads, " +
@@ -251,7 +264,8 @@ internal sealed class RaceDataSyncOptions
     public string CollectorVersion { get; init; } = "2.0.0";
     public string PromotionJobName { get; init; } = "bha-results-to-curated";
     public string PromoterVersion { get; init; } = "2.0.0";
-    public int DelayBetweenRequestsMilliseconds { get; init; } = 10_000;
+    public int DelayBetweenRequestsMilliseconds { get; init; } = 9_000;
+    public int ThrottleFallbackRequestDelayMilliseconds { get; init; } = 10_000;
     public int WeatherDelayBetweenRequestsMilliseconds { get; init; } = 1_000;
     public int ThrottleRetryBaseDelayMinutes { get; init; } = 15;
     public int MaximumThrottleRetries { get; init; } = 3;

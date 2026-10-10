@@ -117,7 +117,8 @@ public sealed record CollectRaceResultsHistoryCommand(
     TimeSpan ThrottleRetryBaseDelay = default,
     int MaximumThrottleRetries = 0,
     TimeSpan TransientRetryBaseDelay = default,
-    int MaximumTransientRetries = 0);
+    int MaximumTransientRetries = 0,
+    TimeSpan ThrottleFallbackRequestInterval = default);
 
 public sealed record CollectRaceResultsHistoryResult(
     int FixturesFound,

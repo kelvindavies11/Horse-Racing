@@ -19,6 +19,11 @@ public sealed class CollectRaceResultsHistoryHandler(
         Validate(command);
 
         var collector = new CollectRawSourceHandler(sourceClient, repository, timeProvider);
+        var requestPacing = new RequestPacingState(
+            command.DelayBetweenRequests,
+            command.ThrottleFallbackRequestInterval == default
+                ? command.DelayBetweenRequests
+                : command.ThrottleFallbackRequestInterval);
         var dispatchItemId = command.DispatchItemId
             ?? $"range-{command.FromDate:yyyyMMdd}-{command.ToDate:yyyyMMdd}";
         var successfulJobNames = new HashSet<string>(StringComparer.Ordinal);
@@ -35,6 +40,7 @@ public sealed class CollectRaceResultsHistoryHandler(
             "BHA racecourse locations API",
             interpreter.CreateRacecoursesUri(),
             command,
+            requestPacing,
             reuseSuccessful: true,
             dispatchItemId,
             cancellationToken);
@@ -59,6 +65,7 @@ public sealed class CollectRaceResultsHistoryHandler(
                     "BHA result fixtures API",
                     interpreter.CreateFixturePageUri(year, month, page),
                     command,
+                    requestPacing,
                     command.ReuseSuccessfulPayloads,
                     dispatchItemId,
                     cancellationToken);
@@ -109,6 +116,7 @@ public sealed class CollectRaceResultsHistoryHandler(
                 item.SourceName,
                 item.SourceUri,
                 command,
+                requestPacing,
                 reuseSuccessful: true,
                 dispatchItemId,
                 cancellationToken);
@@ -243,6 +251,7 @@ public sealed class CollectRaceResultsHistoryHandler(
         string sourceName,
         Uri sourceUri,
         CollectRaceResultsHistoryCommand command,
+        RequestPacingState requestPacing,
         bool reuseSuccessful,
         string dispatchItemId,
         CancellationToken cancellationToken)
@@ -269,9 +278,14 @@ public sealed class CollectRaceResultsHistoryHandler(
                     sourceName,
                     sourceUri,
                     command.CollectorVersion,
-                    command.DelayBetweenRequests,
+                    requestPacing.CurrentInterval,
                     dispatchItemId),
                 cancellationToken);
+
+            if (result.HttpStatusCode is 418 or 429)
+            {
+                requestPacing.SlowDownAfterThrottle();
+            }
 
             if (result.HttpStatusCode is 418 or 429
                 && throttleRetries < command.MaximumThrottleRetries)
@@ -357,6 +371,16 @@ public sealed class CollectRaceResultsHistoryHandler(
             throw new ArgumentOutOfRangeException(nameof(command), "The request delay cannot be negative.");
         }
 
+        if (command.ThrottleFallbackRequestInterval < TimeSpan.Zero
+            || command.ThrottleFallbackRequestInterval > TimeSpan.FromMinutes(2)
+            || (command.ThrottleFallbackRequestInterval != default
+                && command.ThrottleFallbackRequestInterval < command.DelayBetweenRequests))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(command),
+                "The throttle fallback request interval must be at least the initial interval and no more than two minutes.");
+        }
+
         if (command.ThrottleRetryBaseDelay < TimeSpan.Zero
             || command.ThrottleRetryBaseDelay > TimeSpan.FromHours(1))
         {
@@ -393,4 +417,19 @@ public sealed class CollectRaceResultsHistoryHandler(
         bool Reused,
         int ThrottleRetries,
         int TransientRetries = 0);
+
+    private sealed class RequestPacingState(
+        TimeSpan initialInterval,
+        TimeSpan throttleFallbackInterval)
+    {
+        public TimeSpan CurrentInterval { get; private set; } = initialInterval;
+
+        public void SlowDownAfterThrottle()
+        {
+            if (throttleFallbackInterval > CurrentInterval)
+            {
+                CurrentInterval = throttleFallbackInterval;
+            }
+        }
+    }
 }

@@ -121,6 +121,45 @@ public sealed class CollectRaceResultsHistoryHandlerTests
             uri => uri.AbsolutePath.EndsWith("/races/202/results", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData(418)]
+    [InlineData(429)]
+    public async Task Falls_back_to_the_conservative_interval_after_throttling(int statusCode)
+    {
+        var interpreter = new StubInterpreter(twoRaces: true);
+        var repository = new RecordingRepository();
+        var firstRaceAttempts = 0;
+        var client = new RecordingSourceClient(uri =>
+        {
+            if (uri.AbsolutePath.EndsWith("/races/201/results", StringComparison.Ordinal)
+                && firstRaceAttempts++ == 0)
+            {
+                return Response(uri, statusCode, "Throttled");
+            }
+
+            return Success(uri);
+        });
+        var handler = CreateHandler(client, interpreter, repository);
+        var trialInterval = TimeSpan.FromSeconds(9);
+        var fallbackInterval = TimeSpan.FromSeconds(10);
+        var command = CreateCommand() with
+        {
+            DelayBetweenRequests = trialInterval,
+            ThrottleFallbackRequestInterval = fallbackInterval,
+            ThrottleRetryBaseDelay = TimeSpan.Zero,
+            MaximumThrottleRetries = 1
+        };
+
+        var result = await handler.HandleAsync(command, CancellationToken.None);
+
+        Assert.Equal(1, result.ThrottleRetries);
+        Assert.Equal(6, repository.MinimumRequestIntervals.Count);
+        Assert.All(repository.MinimumRequestIntervals.Take(4), interval =>
+            Assert.Equal(trialInterval, interval));
+        Assert.All(repository.MinimumRequestIntervals.Skip(4), interval =>
+            Assert.Equal(fallbackInterval, interval));
+    }
+
     [Fact]
     public async Task Retries_an_audited_transient_failure_and_continues_the_batch()
     {
@@ -320,6 +359,8 @@ public sealed class CollectRaceResultsHistoryHandlerTests
 
         public List<RawCollectionStart> Starts { get; } = [];
 
+        public List<TimeSpan> MinimumRequestIntervals { get; } = [];
+
         public List<(RawCollectionCompletion Completion, RawPayloadCapture? Payload)> Finishes { get; } = [];
 
         public void AddSuccessful(string jobName, Uri sourceUri)
@@ -352,6 +393,7 @@ public sealed class CollectRaceResultsHistoryHandlerTests
             CancellationToken cancellationToken)
         {
             Starts.Add(collectionRun);
+            MinimumRequestIntervals.Add(minimumRequestInterval);
             return Task.FromResult(true);
         }
 

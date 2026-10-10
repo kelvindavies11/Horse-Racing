@@ -99,7 +99,7 @@ $arguments = @(
     '-ProbeIntervalMinutes',
     '15',
     '-RequestDelayMilliseconds',
-    '10000',
+    '9000',
     '-MaxParallelism',
     '1'
 )
