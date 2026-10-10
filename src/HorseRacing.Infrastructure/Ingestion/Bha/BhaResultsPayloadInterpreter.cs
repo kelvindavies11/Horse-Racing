@@ -13,12 +13,26 @@ public sealed class BhaResultsPayloadInterpreter : IRaceResultsPayloadInterprete
 
     public Uri CreateRacecoursesUri() => new($"{BaseUri}/racecourses/");
 
-    public Uri CreateFixturePageUri(int year, int month, int page) =>
-        new($"{BaseUri}/fixtures/?resultsAvailable=1&fields={FixtureFields}" +
-            $"&year={year:D4}&month={month:D2}&page={page}&per_page=250");
+    public Uri CreateFixturePageUri(
+        int year,
+        int month,
+        int page,
+        bool resultsAvailableOnly = true) =>
+        new($"{BaseUri}/fixtures/?" +
+            (resultsAvailableOnly ? "resultsAvailable=1&" : string.Empty) +
+            $"fields={FixtureFields}&year={year:D4}&month={month:D2}&page={page}&per_page=250");
 
     public Uri CreateFixtureRacesUri(ResultFixtureReference fixture) =>
         new($"{BaseUri}/fixtures/{fixture.FixtureYear:D4}/{fixture.FixtureId}/races");
+
+    public Uri CreateFixtureGoingUri(ResultFixtureReference fixture) =>
+        new($"{BaseUri}/fixtures/{fixture.FixtureYear:D4}/{fixture.FixtureId}/going");
+
+    public Uri CreateRaceDetailsUri(ResultRaceReference race) =>
+        new($"{BaseUri}/races/{race.RaceYear:D4}/{race.RaceId}/{race.DivisionSequence}");
+
+    public Uri CreateRaceEntriesUri(ResultRaceReference race) =>
+        new($"{BaseUri}/races/{race.RaceYear:D4}/{race.RaceId}/{race.DivisionSequence}/entries");
 
     public Uri CreateRaceResultsUri(ResultRaceReference race) =>
         new($"{BaseUri}/races/{race.RaceYear:D4}/{race.RaceId}/{race.DivisionSequence}/results");

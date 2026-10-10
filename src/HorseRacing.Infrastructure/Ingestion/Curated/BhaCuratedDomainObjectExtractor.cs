@@ -317,10 +317,12 @@ public sealed class BhaCuratedDomainObjectExtractor : ICuratedRawPayloadExtracto
             yield return primaryCandidate;
         }
 
-        if (domainObjectType != "RunnerResult")
+        if (domainObjectType is not ("Runner" or "RunnerResult"))
         {
             yield break;
         }
+
+        var derivedFromResult = domainObjectType == "RunnerResult";
 
         var horse = TryCreateRelatedCandidate(
             payload,
@@ -328,7 +330,8 @@ public sealed class BhaCuratedDomainObjectExtractor : ICuratedRawPayloadExtracto
             "Horse",
             ["animalId", "horseId", "racehorseId"],
             ["racehorseName", "horseName"],
-            ["animalId", "racehorseName"]);
+            ["animalId", "racehorseName", "horseName"],
+            derivedFromResult);
         if (horse is not null)
         {
             yield return horse;
@@ -340,7 +343,8 @@ public sealed class BhaCuratedDomainObjectExtractor : ICuratedRawPayloadExtracto
             "Jockey",
             ["jockeyId"],
             ["jockeyName"],
-            ["jockeyId", "jockeyName", "jockeyLicenceType"]);
+            ["jockeyId", "jockeyName", "jockeyLicenceType"],
+            derivedFromResult);
         if (jockey is not null)
         {
             yield return jockey;
@@ -352,7 +356,8 @@ public sealed class BhaCuratedDomainObjectExtractor : ICuratedRawPayloadExtracto
             "Trainer",
             ["trainerId"],
             ["trainerName"],
-            ["trainerId", "trainerName"]);
+            ["trainerId", "trainerName"],
+            derivedFromResult);
         if (trainer is not null)
         {
             yield return trainer;
@@ -364,13 +369,14 @@ public sealed class BhaCuratedDomainObjectExtractor : ICuratedRawPayloadExtracto
             "Owner",
             ["ownerId"],
             ["ownerName"],
-            ["ownerId", "ownerName"]);
+            ["ownerId", "ownerName"],
+            derivedFromResult);
         if (owner is not null)
         {
             yield return owner;
         }
 
-        var stable = TryCreateTrainerStableCandidate(payload, record);
+        var stable = TryCreateTrainerStableCandidate(payload, record, derivedFromResult);
         if (stable is not null)
         {
             yield return stable;
@@ -383,7 +389,8 @@ public sealed class BhaCuratedDomainObjectExtractor : ICuratedRawPayloadExtracto
         string domainObjectType,
         string[] sourceKeyFields,
         string[] displayNameFields,
-        string[] projectedFields)
+        string[] projectedFields,
+        bool derivedFromResult)
     {
         var sourceKeyValue = GetFirstScalar(record, sourceKeyFields);
         var displayNameValue = GetFirstScalar(record, displayNameFields);
@@ -395,7 +402,7 @@ public sealed class BhaCuratedDomainObjectExtractor : ICuratedRawPayloadExtracto
         var sourceKey = BoundSourceKey(sourceKeyValue);
         var displayName = Truncate(displayNameValue, 500);
         var foundData = ProjectFoundData(record, projectedFields);
-        foundData["derivedFromResult"] = true;
+        foundData[derivedFromResult ? "derivedFromResult" : "derivedFromEntry"] = true;
 
         return new CuratedDomainObjectCandidate(
             "BHA",
@@ -409,7 +416,8 @@ public sealed class BhaCuratedDomainObjectExtractor : ICuratedRawPayloadExtracto
 
     private static CuratedDomainObjectCandidate? TryCreateTrainerStableCandidate(
         RawPayloadForPromotion payload,
-        JsonElement record)
+        JsonElement record,
+        bool derivedFromResult)
     {
         var trainerId = GetFirstScalar(record, ["trainerId"]);
         var trainerName = GetFirstScalar(record, ["trainerName"]);
@@ -422,9 +430,11 @@ public sealed class BhaCuratedDomainObjectExtractor : ICuratedRawPayloadExtracto
         var displayName = Truncate($"Stable of {trainerName}", 500);
         var foundData = ProjectFoundData(record, ["trainerId", "trainerName"]);
         foundData["stableName"] = displayName;
-        foundData["derivedFromResult"] = true;
+        foundData[derivedFromResult ? "derivedFromResult" : "derivedFromEntry"] = true;
         foundData["identityBasis"] =
-            "Derived from the result's trainer attribution; the BHA result does not provide an official stable name or location.";
+            derivedFromResult
+                ? "Derived from the result's trainer attribution; the BHA result does not provide an official stable name or location."
+                : "Derived from the entry's trainer attribution; the BHA entry does not provide an official stable name or location.";
 
         return new CuratedDomainObjectCandidate(
             "BHA",
@@ -500,6 +510,13 @@ public sealed class BhaCuratedDomainObjectExtractor : ICuratedRawPayloadExtracto
                 GetFirstScalar(record, ["yearOfRace", "raceYear"]),
                 GetFirstScalar(record, ["raceId"]),
                 GetFirstScalar(record, ["divisionSequence"])
+            ],
+            "Runner" =>
+            [
+                GetFirstScalar(record, ["yearOfRace", "raceYear"]),
+                GetFirstScalar(record, ["raceId"]),
+                GetFirstScalar(record, ["divisionSequence"]),
+                GetFirstScalar(record, ["animalId", "runnerId", "horseId", "racehorseId"])
             ],
             "RunnerResult" =>
             [

@@ -76,9 +76,9 @@ if (toDate < fromDate || toDate.DayNumber - fromDate.DayNumber > 31)
 }
 
 var mode = (ReadArgument(args, "--mode") ?? "all").ToLowerInvariant();
-if (mode is not ("all" or "raw" or "weather"))
+if (mode is not ("all" or "raw" or "weather" or "upcoming"))
 {
-    logger.LogError("--mode must be all, raw, or weather.");
+    logger.LogError("--mode must be all, raw, weather, or upcoming.");
     return 2;
 }
 
@@ -110,7 +110,7 @@ logger.LogInformation(
     fromDate,
     toDate,
     mode);
-if (mode is "all" or "raw")
+if (mode is "all" or "raw" or "upcoming")
 {
     logger.LogInformation(
         "BHA API request pacing starts at {InitialIntervalMilliseconds} ms and falls back to {FallbackIntervalMilliseconds} ms after the first HTTP 418 or 429 response.",
@@ -123,7 +123,7 @@ try
     var failures = 0;
     CollectRaceResultsHistoryResult? collection = null;
 
-    if (mode is "all" or "raw")
+    if (mode is "all" or "raw" or "upcoming")
     {
         collection = await services.GetRequiredService<CollectRaceResultsHistoryHandler>().HandleAsync(
             new CollectRaceResultsHistoryCommand(
@@ -137,7 +137,8 @@ try
                 options.MaximumThrottleRetries,
                 TimeSpan.FromSeconds(options.TransientRetryBaseDelaySeconds),
                 options.MaximumTransientRetries,
-                TimeSpan.FromMilliseconds(options.ThrottleFallbackRequestDelayMilliseconds)),
+                TimeSpan.FromMilliseconds(options.ThrottleFallbackRequestDelayMilliseconds),
+                CollectFutureDetails: mode == "upcoming"),
             shutdown.Token);
         logger.LogInformation(
             "Raw collection found {Fixtures} fixtures and {Races} races, captured {Results} new result payloads, " +
@@ -158,7 +159,7 @@ try
         return failures > 0 ? 1 : 0;
     }
 
-    if (mode == "all" && collection is not null)
+    if (mode is "all" or "upcoming" && collection is not null)
     {
         var promoter = services.GetRequiredService<PromoteRawPayloadsHandler>();
         var selected = 0;

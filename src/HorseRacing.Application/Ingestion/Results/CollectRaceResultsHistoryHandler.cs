@@ -26,6 +26,7 @@ public sealed class CollectRaceResultsHistoryHandler(
                 : command.ThrottleFallbackRequestInterval);
         var dispatchItemId = command.DispatchItemId
             ?? $"range-{command.FromDate:yyyyMMdd}-{command.ToDate:yyyyMMdd}";
+        var sourcePrefix = command.CollectFutureDetails ? "bha-upcoming" : "bha-results";
         var successfulJobNames = new HashSet<string>(StringComparer.Ordinal);
         var failedCollections = 0;
         var payloadsReused = 0;
@@ -57,13 +58,19 @@ public sealed class CollectRaceResultsHistoryHandler(
             var lastPage = 1;
             do
             {
-                var jobName = $"bha-results-fixtures-{year:D4}-{month:D2}-p{page}";
+                var jobName = $"{sourcePrefix}-fixtures-{year:D4}-{month:D2}-p{page}";
                 var collection = await CollectAsync(
                     collector,
                     repository,
                     jobName,
-                    "BHA result fixtures API",
-                    interpreter.CreateFixturePageUri(year, month, page),
+                    command.CollectFutureDetails
+                        ? "BHA upcoming fixtures API"
+                        : "BHA result fixtures API",
+                    interpreter.CreateFixturePageUri(
+                        year,
+                        month,
+                        page,
+                        resultsAvailableOnly: !command.CollectFutureDetails),
                     command,
                     requestPacing,
                     command.ReuseSuccessfulPayloads,
@@ -94,12 +101,29 @@ public sealed class CollectRaceResultsHistoryHandler(
                         new RaceResultsWorkItemDefinition(
                             dispatchItemId,
                             RaceResultsWorkType.FixtureRaces,
-                            $"bha-results-races-{fixture.FixtureYear:D4}-{fixture.FixtureId}",
-                            $"BHA races at {fixture.CourseName}",
+                            $"{sourcePrefix}-races-{fixture.FixtureYear:D4}-{fixture.FixtureId}",
+                            command.CollectFutureDetails
+                                ? $"BHA upcoming races at {fixture.CourseName}"
+                                : $"BHA races at {fixture.CourseName}",
                             interpreter.CreateFixtureRacesUri(fixture),
                             Priority: 10,
-                            RefreshCompletedItem: !command.ReuseSuccessfulPayloads),
+                            RefreshCompletedItem: command.CollectFutureDetails
+                                || !command.ReuseSuccessfulPayloads),
                         cancellationToken);
+
+                    if (command.CollectFutureDetails)
+                    {
+                        await workQueue.EnqueueAsync(
+                            new RaceResultsWorkItemDefinition(
+                                dispatchItemId,
+                                RaceResultsWorkType.FixtureGoing,
+                                $"{sourcePrefix}-going-{fixture.FixtureYear:D4}-{fixture.FixtureId}",
+                                $"BHA going at {fixture.CourseName}",
+                                interpreter.CreateFixtureGoingUri(fixture),
+                                Priority: 5,
+                                RefreshCompletedItem: true),
+                            cancellationToken);
+                    }
                 }
 
                 page++;
@@ -117,7 +141,7 @@ public sealed class CollectRaceResultsHistoryHandler(
                 item.SourceUri,
                 command,
                 requestPacing,
-                reuseSuccessful: true,
+                reuseSuccessful: !command.CollectFutureDetails,
                 dispatchItemId,
                 cancellationToken);
             throttleRetries += collection.ThrottleRetries;
@@ -165,15 +189,41 @@ public sealed class CollectRaceResultsHistoryHandler(
             {
                 foreach (var race in interpreter.ReadRaces(collection.Result.Content))
                 {
-                    await workQueue.EnqueueAsync(
-                        new RaceResultsWorkItemDefinition(
-                            dispatchItemId,
-                            RaceResultsWorkType.RaceResults,
-                            $"bha-results-runners-{race.RaceYear:D4}-{race.RaceId}-{race.DivisionSequence}",
-                            $"BHA result for {race.RaceName}",
-                            interpreter.CreateRaceResultsUri(race),
-                            Priority: 0),
-                        cancellationToken);
+                    if (command.CollectFutureDetails)
+                    {
+                        await workQueue.EnqueueAsync(
+                            new RaceResultsWorkItemDefinition(
+                                dispatchItemId,
+                                RaceResultsWorkType.RaceDetails,
+                                $"{sourcePrefix}-race-{race.RaceYear:D4}-{race.RaceId}-{race.DivisionSequence}",
+                                $"BHA race details for {race.RaceName}",
+                                interpreter.CreateRaceDetailsUri(race),
+                                Priority: 0,
+                                RefreshCompletedItem: true),
+                            cancellationToken);
+                        await workQueue.EnqueueAsync(
+                            new RaceResultsWorkItemDefinition(
+                                dispatchItemId,
+                                RaceResultsWorkType.RaceEntries,
+                                $"{sourcePrefix}-entries-{race.RaceYear:D4}-{race.RaceId}-{race.DivisionSequence}",
+                                $"BHA entries for {race.RaceName}",
+                                interpreter.CreateRaceEntriesUri(race),
+                                Priority: 0,
+                                RefreshCompletedItem: true),
+                            cancellationToken);
+                    }
+                    else
+                    {
+                        await workQueue.EnqueueAsync(
+                            new RaceResultsWorkItemDefinition(
+                                dispatchItemId,
+                                RaceResultsWorkType.RaceResults,
+                                $"bha-results-runners-{race.RaceYear:D4}-{race.RaceId}-{race.DivisionSequence}",
+                                $"BHA result for {race.RaceName}",
+                                interpreter.CreateRaceResultsUri(race),
+                                Priority: 0),
+                            cancellationToken);
+                    }
                 }
             }
 
@@ -233,7 +283,7 @@ public sealed class CollectRaceResultsHistoryHandler(
                 await workQueue.GetSuccessfulJobNamesAsync(dispatchItemId, cancellationToken));
             return new CollectRaceResultsHistoryResult(
                 fixturesFound,
-                summary.ResultItems,
+                command.CollectFutureDetails ? summary.RaceDetailItems : summary.ResultItems,
                 resultPayloadsCollected,
                 payloadsReused,
                 summary.UnavailableItems,

@@ -8,9 +8,15 @@ public interface IRaceResultsPayloadInterpreter
 {
     Uri CreateRacecoursesUri();
 
-    Uri CreateFixturePageUri(int year, int month, int page);
+    Uri CreateFixturePageUri(int year, int month, int page, bool resultsAvailableOnly = true);
 
     Uri CreateFixtureRacesUri(ResultFixtureReference fixture);
+
+    Uri CreateFixtureGoingUri(ResultFixtureReference fixture);
+
+    Uri CreateRaceDetailsUri(ResultRaceReference race);
+
+    Uri CreateRaceEntriesUri(ResultRaceReference race);
 
     Uri CreateRaceResultsUri(ResultRaceReference race);
 
@@ -45,7 +51,10 @@ public interface IRaceResultsWorkQueue
 public enum RaceResultsWorkType
 {
     FixtureRaces,
-    RaceResults
+    RaceResults,
+    FixtureGoing,
+    RaceDetails,
+    RaceEntries
 }
 
 public enum RaceResultsWorkDisposition
@@ -84,6 +93,7 @@ public sealed record RaceResultsWorkCompletion(
 public sealed record RaceResultsWorkQueueSummary(
     int FixtureItems,
     int ResultItems,
+    int RaceDetailItems,
     int PendingItems,
     int RunningItems,
     int SucceededItems,
@@ -118,7 +128,8 @@ public sealed record CollectRaceResultsHistoryCommand(
     int MaximumThrottleRetries = 0,
     TimeSpan TransientRetryBaseDelay = default,
     int MaximumTransientRetries = 0,
-    TimeSpan ThrottleFallbackRequestInterval = default);
+    TimeSpan ThrottleFallbackRequestInterval = default,
+    bool CollectFutureDetails = false);
 
 public sealed record CollectRaceResultsHistoryResult(
     int FixturesFound,

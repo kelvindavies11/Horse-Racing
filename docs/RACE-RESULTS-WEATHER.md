@@ -56,6 +56,32 @@ The supervisor owns one phase at a time and normally runs one monthly Raw worker
 
 The completed-year phases use `resume-monthly-race-data-history.ps1` with isolated state directories such as `artifacts/2025-results-sync`. Import Control shows request-level download coverage beside the Raw audit totals. The automation starts 2025 only after the current 2026 pass is caught up and the protected runner pool is free; use the web application's two-step control for 2024 through 2020.
 
+## Rolling prediction window
+
+Once every configured 2020–2026 year batch has successful Raw/Curated and weather
+coverage, run the guarded rolling job daily:
+
+```powershell
+./scripts/run-rolling-race-window.ps1
+```
+
+For a run on date `D` in `Europe/London`, the first pass checks `D - 1 calendar month`
+through `D - 1 day` for result fixtures and missing race results. The second pass uses
+`--mode upcoming` for `D` through `D + 1 calendar month`. Upcoming mode omits the
+`resultsAvailable` fixture filter, then captures fixture races, going, race details and
+entries. It never requests a result for a future race, so an expected absence of future
+results is not a failure. Entry payloads carry the horse, jockey, trainer, owner and
+stable references used by Curated promotion; their daily refresh picks up declarations
+as the race approaches.
+
+The script refreshes and validates the public BHA web-client token without printing it,
+uses the same nine-second API gate and adaptive ten-second throttle fallback, and retries
+an unfinished pass once with a newly refreshed token if the sync exits unsuccessfully.
+It exits successfully without doing work until the historical checkpoints are complete,
+and it also skips when a historical, Raw or Curated import is active. `-DryRun` verifies
+the guard and prints the exact calculated ranges without calling BHA or writing the
+database.
+
 ## API and website
 
 `GET /api/v1/curated/results?from=YYYY-MM-DD&to=YYYY-MM-DD` returns an inclusive range of up to 32 days. Omitting dates selects the seven-day window ending on the latest race that has both meeting context and runner results in Curated, so a historical or actively importing local copy opens with populated results. Each race contains its meeting/course context, ordered finishers and non-runners, declared winner, location provenance and race-hour weather when available.

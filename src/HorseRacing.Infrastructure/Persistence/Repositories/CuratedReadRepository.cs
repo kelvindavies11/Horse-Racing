@@ -442,7 +442,7 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
                   ON runner.source_key >= race_key.value || ':'
                  AND runner.source_key < race_key.value || ';'
                 WHERE runner.source_system = {"BHA"}
-                  AND runner.domain_object_type = {"RunnerResult"}
+                  AND runner.domain_object_type IN ('Runner', 'RunnerResult')
                 """)
             .AsNoTracking()
             .Select(item => new ResultSourceRow(
@@ -468,6 +468,10 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
             .ToDictionary(
                 group => group.Key,
                 group => (IReadOnlyCollection<RunnerResultView>)group
+                    .GroupBy(item => item.HorseKey, StringComparer.Ordinal)
+                    .Select(horse => horse
+                        .OrderByDescending(item => item.HasResult)
+                        .First())
                     .OrderBy(item => item.View.FinishPosition is null)
                     .ThenBy(item => item.View.FinishPosition)
                     .ThenBy(item => item.View.ClothNumber)
@@ -489,13 +493,8 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
                 continue;
             }
 
-            if (!runners.TryGetValue(
-                    (race.RaceYear, race.RaceId, race.DivisionSequence),
-                    out var raceRunners)
-                || raceRunners.Count == 0)
-            {
-                continue;
-            }
+            var raceRunners = runners.GetValueOrDefault(
+                (race.RaceYear, race.RaceId, race.DivisionSequence)) ?? [];
             weatherByRace.TryGetValue(race.Row.Id, out var weather);
             items.Add(new CuratedRaceResult(
                 race.Row.Id,
@@ -702,21 +701,26 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
     private static ParsedResultRace? ParseResultRace(ResultSourceRow row)
     {
         var match = FixtureRaceSourceUri().Match(row.SourceUrl);
-        if (!match.Success
-            || !int.TryParse(match.Groups["fixtureYear"].Value, out var fixtureYear)
-            || !int.TryParse(match.Groups["fixtureId"].Value, out var fixtureId))
-        {
-            return null;
-        }
-
         using var document = JsonDocument.Parse(row.SourceDataJson);
         var data = FoundData(document.RootElement);
+        var fixtureYear = ReadInt(data, "fixtureYear");
+        var fixtureId = ReadInt(data, "fixtureId");
+        if (fixtureYear is null && match.Success
+            && int.TryParse(match.Groups["fixtureYear"].Value, out var fixtureYearFromUrl))
+        {
+            fixtureYear = fixtureYearFromUrl;
+        }
+        if (fixtureId is null && match.Success
+            && int.TryParse(match.Groups["fixtureId"].Value, out var fixtureIdFromUrl))
+        {
+            fixtureId = fixtureIdFromUrl;
+        }
         var raceYear = ReadInt(data, "yearOfRace");
         var raceId = ReadInt(data, "raceId");
         var division = ReadInt(data, "divisionSequence") ?? 0;
         var dateText = ReadText(data, "raceDate");
         var timeText = ReadText(data, "raceTime");
-        if (raceYear is null || raceId is null
+        if (fixtureYear is null || fixtureId is null || raceYear is null || raceId is null
             || !DateOnly.TryParseExact(dateText, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)
             || !TimeOnly.TryParseExact(timeText, "HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out var time))
         {
@@ -725,8 +729,8 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
 
         return new ParsedResultRace(
             row,
-            fixtureYear,
-            fixtureId,
+            fixtureYear.Value,
+            fixtureId.Value,
             raceYear.Value,
             raceId.Value,
             division,
@@ -758,6 +762,8 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
             raceYear.Value,
             raceId.Value,
             division,
+            ReadText(data, "animalId", "runnerId", "horseId", "racehorseId") ?? row.SourceKey,
+            row.Type == "RunnerResult",
             new RunnerResultView(
                 ReadInt(data, "resultFinishPos", "finalPosition"),
                 horseName,
@@ -766,7 +772,8 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
                 ReadText(data, "jockeyName"),
                 ReadText(data, "trainerName"),
                 ReadText(data, "ownerName"),
-                ReadText(data, "status") ?? "Unknown",
+                ReadText(data, "status", "entryStatus")
+                    ?? (row.Type == "Runner" ? "Declared" : "Unknown"),
                 ReadText(data, "bettingRatio"),
                 ReadText(data, "resultBtnDistance", "resultBtnDistancePFO"),
                 ReadText(data, "finishTime"),
@@ -1028,6 +1035,8 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
         int RaceYear,
         int RaceId,
         int DivisionSequence,
+        string HorseKey,
+        bool HasResult,
         RunnerResultView View);
 
     [GeneratedRegex(@"/bha/v1/fixtures/(?<fixtureYear>\d{4})/(?<fixtureId>\d+)/races/?$", RegexOptions.IgnoreCase)]

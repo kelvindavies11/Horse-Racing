@@ -131,6 +131,7 @@ public sealed class RaceResultsWorkQueueRepository(
         return new RaceResultsWorkQueueSummary(
             items.Count(item => item.WorkType == RaceResultsWorkType.FixtureRaces),
             items.Count(item => item.WorkType == RaceResultsWorkType.RaceResults),
+            items.Count(item => item.WorkType == RaceResultsWorkType.RaceDetails),
             items.Count(item => item.Status == RaceResultsWorkQueueStatus.Pending),
             items.Count(item => item.Status == RaceResultsWorkQueueStatus.Running),
             items.Count(item => item.Status == RaceResultsWorkQueueStatus.Succeeded),

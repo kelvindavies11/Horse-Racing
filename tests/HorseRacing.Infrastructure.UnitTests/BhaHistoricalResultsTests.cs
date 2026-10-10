@@ -11,7 +11,11 @@ public sealed class BhaHistoricalResultsTests
     [Theory]
     [InlineData("https://api09.horseracing.software/bha/v1/racecourses/")]
     [InlineData("https://api09.horseracing.software/bha/v1/fixtures/?resultsAvailable=1&fields=fixtureId&year=2026&month=10&page=1&per_page=100")]
+    [InlineData("https://api09.horseracing.software/bha/v1/fixtures/?fields=fixtureId&year=2026&month=10&page=1&per_page=250")]
     [InlineData("https://api09.horseracing.software/bha/v1/fixtures/2026/123/races")]
+    [InlineData("https://api09.horseracing.software/bha/v1/fixtures/2026/123/going")]
+    [InlineData("https://api09.horseracing.software/bha/v1/races/2026/456/0")]
+    [InlineData("https://api09.horseracing.software/bha/v1/races/2026/456/0/entries")]
     [InlineData("https://api09.horseracing.software/bha/v1/races/2026/456/0/results")]
     public void Source_validation_accepts_reviewed_historical_result_endpoints(string candidate)
     {
@@ -22,6 +26,7 @@ public sealed class BhaHistoricalResultsTests
     [InlineData("http://api09.horseracing.software/bha/v1/racecourses/")]
     [InlineData("https://example.com/bha/v1/races/2026/456/0/results")]
     [InlineData("https://api09.horseracing.software/bha/v1/fixtures/?year=2026&month=10&page=1")]
+    [InlineData("https://api09.horseracing.software/bha/v1/fixtures/?resultsAvailable=0&fields=fixtureId&year=2026&month=10&page=1&per_page=250")]
     [InlineData("https://api09.horseracing.software/bha/v1/fixtures/?resultsAvailable=1&year=2026&month=13&page=1")]
     [InlineData("https://api09.horseracing.software/bha/v1/races/2026/456/0/results?redirect=https://example.com")]
     public void Source_validation_rejects_unreviewed_historical_result_locations(string candidate)
@@ -68,7 +73,13 @@ public sealed class BhaHistoricalResultsTests
         Assert.Equal(
             "https://api09.horseracing.software/bha/v1/fixtures/?resultsAvailable=1&fields=fixtureYear,fixtureId,courseId,courseName,fixtureDate,fixtureType,fixtureSession,firstRace,numberOfRaces,going,weather,racingTrackType,abandonedReasonCode,highlightTitle&year=2026&month=10&page=1&per_page=250",
             interpreter.CreateFixturePageUri(2026, 10, 1).ToString());
+        Assert.Equal(
+            "https://api09.horseracing.software/bha/v1/fixtures/?fields=fixtureYear,fixtureId,courseId,courseName,fixtureDate,fixtureType,fixtureSession,firstRace,numberOfRaces,going,weather,racingTrackType,abandonedReasonCode,highlightTitle&year=2026&month=10&page=1&per_page=250",
+            interpreter.CreateFixturePageUri(2026, 10, 1, resultsAvailableOnly: false).ToString());
         Assert.Equal("https://api09.horseracing.software/bha/v1/fixtures/2026/101/races", interpreter.CreateFixtureRacesUri(fixture).ToString());
+        Assert.Equal("https://api09.horseracing.software/bha/v1/fixtures/2026/101/going", interpreter.CreateFixtureGoingUri(fixture).ToString());
+        Assert.Equal("https://api09.horseracing.software/bha/v1/races/2026/202/1", interpreter.CreateRaceDetailsUri(race).ToString());
+        Assert.Equal("https://api09.horseracing.software/bha/v1/races/2026/202/1/entries", interpreter.CreateRaceEntriesUri(race).ToString());
         Assert.Equal("https://api09.horseracing.software/bha/v1/races/2026/202/1/results", interpreter.CreateRaceResultsUri(race).ToString());
         Assert.Equal("The Example Stakes", race.RaceName);
     }

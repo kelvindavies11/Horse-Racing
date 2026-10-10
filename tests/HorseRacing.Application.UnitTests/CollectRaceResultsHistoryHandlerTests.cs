@@ -282,6 +282,29 @@ public sealed class CollectRaceResultsHistoryHandlerTests
         Assert.Single(client.Requests);
     }
 
+    [Fact]
+    public async Task Collects_future_race_details_without_requesting_results()
+    {
+        var interpreter = new StubInterpreter();
+        var repository = new RecordingRepository();
+        var client = new RecordingSourceClient(uri => Success(uri));
+        var handler = CreateHandler(client, interpreter, repository);
+
+        var result = await handler.HandleAsync(
+            CreateCommand() with { CollectFutureDetails = true },
+            CancellationToken.None);
+
+        Assert.Equal(1, result.FixturesFound);
+        Assert.Equal(1, result.RacesFound);
+        Assert.Equal(0, result.ResultPayloadsCollected);
+        Assert.Equal(0, result.UnavailableResultPayloads);
+        Assert.Equal(0, result.FailedCollections);
+        Assert.Contains(client.Requests, uri => uri.AbsolutePath.EndsWith("/fixtures/101/going"));
+        Assert.Contains(client.Requests, uri => uri.AbsolutePath.EndsWith("/races/201"));
+        Assert.Contains(client.Requests, uri => uri.AbsolutePath.EndsWith("/races/201/entries"));
+        Assert.DoesNotContain(client.Requests, uri => uri.AbsolutePath.EndsWith("/results"));
+    }
+
     private static CollectRaceResultsHistoryHandler CreateHandler(
         RecordingSourceClient client,
         StubInterpreter interpreter,
@@ -337,11 +360,24 @@ public sealed class CollectRaceResultsHistoryHandlerTests
 
         public Uri CreateRacecoursesUri() => new("https://example.test/racecourses");
 
-        public Uri CreateFixturePageUri(int year, int month, int page) =>
+        public Uri CreateFixturePageUri(
+            int year,
+            int month,
+            int page,
+            bool resultsAvailableOnly = true) =>
             new($"https://example.test/fixtures/{year}/{month}/{page}");
 
         public Uri CreateFixtureRacesUri(ResultFixtureReference fixture) =>
             new($"https://example.test/fixtures/{fixture.FixtureId}/races");
+
+        public Uri CreateFixtureGoingUri(ResultFixtureReference fixture) =>
+            new($"https://example.test/fixtures/{fixture.FixtureId}/going");
+
+        public Uri CreateRaceDetailsUri(ResultRaceReference race) =>
+            new($"https://example.test/races/{race.RaceId}");
+
+        public Uri CreateRaceEntriesUri(ResultRaceReference race) =>
+            new($"https://example.test/races/{race.RaceId}/entries");
 
         public Uri CreateRaceResultsUri(ResultRaceReference race) =>
             new($"https://example.test/races/{race.RaceId}/results");
@@ -480,6 +516,7 @@ public sealed class CollectRaceResultsHistoryHandlerTests
             return Task.FromResult(new RaceResultsWorkQueueSummary(
                 matching.Count(item => item.Definition.WorkType == RaceResultsWorkType.FixtureRaces),
                 matching.Count(item => item.Definition.WorkType == RaceResultsWorkType.RaceResults),
+                matching.Count(item => item.Definition.WorkType == RaceResultsWorkType.RaceDetails),
                 matching.Count(item => item.Disposition is null && !item.Claimed),
                 matching.Count(item => item.Claimed),
                 matching.Count(item => item.Disposition == RaceResultsWorkDisposition.Succeeded),

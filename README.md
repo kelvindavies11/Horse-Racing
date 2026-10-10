@@ -128,6 +128,18 @@ refresh and validation procedure is documented in the
 agents should perform it by default before a results import and never display or commit
 the token.
 
+After the configured 2020–2026 year batches are complete, the guarded rolling runner
+keeps the prediction window current:
+
+```powershell
+./scripts/run-rolling-race-window.ps1
+```
+
+It revisits the previous calendar month for results and refreshes the next calendar
+month of fixtures, races, going and entries. It skips safely while historical work or
+another import is active. Future races are promoted into the same Curated records used
+by the API and website; no result request is made for them.
+
 Start the website in a second terminal:
 
 ```powershell

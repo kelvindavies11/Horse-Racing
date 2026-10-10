@@ -99,7 +99,9 @@ public sealed partial class BhaHistoricalResultsApiClient(
                 "resultsAvailable", "fields", "year", "month", "page", "per_page"
             };
             return query.Keys.All(allowed.Contains)
-                && query.GetValueOrDefault("resultsAvailable") == "1"
+                && (!query.TryGetValue("resultsAvailable", out var resultsAvailable)
+                    || resultsAvailable == "1")
+                && query.ContainsKey("fields")
                 && int.TryParse(query.GetValueOrDefault("year"), out var year)
                 && year is >= 2000 and <= 2200
                 && int.TryParse(query.GetValueOrDefault("month"), out var month)
@@ -109,7 +111,11 @@ public sealed partial class BhaHistoricalResultsApiClient(
         }
 
         return string.IsNullOrEmpty(sourceUri.Query)
-               && (FixtureRacesPath().IsMatch(path) || RaceResultsPath().IsMatch(path));
+               && (FixtureRacesPath().IsMatch(path)
+                   || FixtureGoingPath().IsMatch(path)
+                   || RaceDetailsPath().IsMatch(path)
+                   || RaceEntriesPath().IsMatch(path)
+                   || RaceResultsPath().IsMatch(path));
     }
 
     private static Dictionary<string, string> ParseQuery(string query) =>
@@ -123,6 +129,15 @@ public sealed partial class BhaHistoricalResultsApiClient(
 
     [GeneratedRegex(@"^/bha/v1/fixtures/\d{4}/\d+/races$", RegexOptions.IgnoreCase)]
     private static partial Regex FixtureRacesPath();
+
+    [GeneratedRegex(@"^/bha/v1/fixtures/\d{4}/\d+/going$", RegexOptions.IgnoreCase)]
+    private static partial Regex FixtureGoingPath();
+
+    [GeneratedRegex(@"^/bha/v1/races/\d{4}/\d+/\d+$", RegexOptions.IgnoreCase)]
+    private static partial Regex RaceDetailsPath();
+
+    [GeneratedRegex(@"^/bha/v1/races/\d{4}/\d+/\d+/entries$", RegexOptions.IgnoreCase)]
+    private static partial Regex RaceEntriesPath();
 
     [GeneratedRegex(@"^/bha/v1/races/\d{4}/\d+/\d+/results$", RegexOptions.IgnoreCase)]
     private static partial Regex RaceResultsPath();
