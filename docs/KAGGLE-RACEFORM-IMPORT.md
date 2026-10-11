@@ -12,6 +12,34 @@ temporary signed redirect URL is never persisted. PostgreSQL receives monthly pa
 rather than the single archive because a PostgreSQL `bytea` value cannot safely hold this
 archive at its current size.
 
+## Source and local file locations
+
+| Item | Location | Details |
+| --- | --- | --- |
+| Public dataset page | [Horse Racing Results UK/Ireland 2015-2025](https://www.kaggle.com/datasets/deltaromeo/horse-racing-results-ukireland-2015-2025) | Human-readable Kaggle page for the selected public dataset. Review its current licence and usage conditions before changing or redistributing the data. |
+| Pinned download | [Kaggle API version 118 download](https://www.kaggle.com/api/v1/datasets/download/deltaromeo/horse-racing-results-ukireland-2015-2025?datasetVersionNumber=118) | Public archive endpoint used by the importer. Kaggle may redirect this URL to a temporary signed download URL; that redirect is not stored. |
+| Cached archive | `.data/kaggle-raceform/raceform-v118.zip` | 1,120,726,580 bytes. SHA-256: `5f48f8f8640e0b429b0d8a21aad69e0fcd9a31bd5181ead37cf4b9bb919b3464`. Excluded from Git. |
+| Download manifest | `.data/kaggle-raceform/raceform-v118.zip.manifest.json` | Records the dataset slug, pinned version, stable public endpoint, byte count, SHA-256 and download timestamp. Excluded from Git. |
+| Extracted SQLite file | `.data/kaggle-raceform/raceform-v118.db` | Extracted from `form_2015-present/form_2015-present/raceform.db` in the archive. The current local file is 801,103,872 bytes and includes the importer's local date index. Excluded from Git. |
+| Import project | `src/HorseRacing.KaggleDataSync` | Downloads, verifies and extracts the archive, creates monthly immutable Raw payloads, then promotes them to Curated records. |
+| Import launchers | `run-kaggle-raceform-import.bat` and `scripts/run-kaggle-raceform-import.ps1` | Restartable entry points for archive download, Raw capture and Curated promotion. |
+| Weather launcher | `scripts/run-kaggle-raceform-weather.ps1` | Restartable monthly Open-Meteo enrichment after Curated promotion. |
+
+All local paths above are relative to the repository root. In the current checkout that
+root is `C:\Users\kelvi\OneDrive\Documents\ChatGPT\Horse-Racing`. The observed version
+118 source coverage is January 2015 through May 2026; there were no source rows for June
+through October 2026 when it was imported on 11 October 2026.
+
+Each monthly PostgreSQL Raw payload records this logical source URL pattern for lineage:
+
+```text
+https://www.kaggle.com/datasets/deltaromeo/horse-racing-results-ukireland-2015-2025/versions/118?rawMonth=YYYY-MM
+```
+
+The Raw collection job name is `kaggle-raceform-results`, the Curated promotion job name
+is `kaggle-raceform-to-curated`, and promoted objects use source system
+`KaggleRaceform`.
+
 ## Run the complete job
 
 From the repository root:

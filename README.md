@@ -137,7 +137,10 @@ For fast historical backfill without BHA request throttling, run the independent
 
 It streams and fingerprints a pinned public Kaggle archive, captures restartable monthly
 Raw payloads, and promotes compatible Curated records. It does not call BHA or require a
-BHA bearer token. See the [Kaggle Raceform bulk import guide](docs/KAGGLE-RACEFORM-IMPORT.md).
+BHA bearer token. The importer currently pins [dataset version 118](https://www.kaggle.com/api/v1/datasets/download/deltaromeo/horse-racing-results-ukireland-2015-2025?datasetVersionNumber=118),
+caches it under `.data/kaggle-raceform`, and records monthly source lineage. See the
+[Kaggle Raceform bulk import guide](docs/KAGGLE-RACEFORM-IMPORT.md) for the dataset page,
+exact archive/database locations, fingerprint, coverage and weather follow-up command.
 
 After the configured 2020–2026 year batches are complete, the guarded rolling runner
 keeps the prediction window current:
