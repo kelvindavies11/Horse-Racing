@@ -12,7 +12,9 @@ public sealed class HorseRacingDbContextFactory
             ?? "Host=localhost;Port=5433;Database=horse_racing;Username=horse_racing;Password=horse_racing_local";
 
         var options = new DbContextOptionsBuilder<HorseRacingDbContext>()
-            .UseNpgsql(connectionString)
+            .UseNpgsql(
+                connectionString,
+                npgsqlOptions => npgsqlOptions.CommandTimeout(600))
             .Options;
 
         return new HorseRacingDbContext(options);

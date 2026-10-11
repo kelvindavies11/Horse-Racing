@@ -20,6 +20,7 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
             {
                 Type = group.Key,
                 Count = group.Count(),
+                FirstObservedAtUtc = group.Min(domainObject => domainObject.FirstObservedAtUtc),
                 LastObservedAtUtc = group.Max(domainObject => domainObject.LastObservedAtUtc)
             })
             .OrderByDescending(summary => summary.Count)
@@ -29,14 +30,12 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
             .Select(row => new EntityTypeSummary(row.Type, row.Count, row.LastObservedAtUtc))
             .ToList();
 
-        var firstObservedAtUtc = await dbContext.CuratedDomainObjects
-            .AsNoTracking()
-            .Select(domainObject => (DateTimeOffset?)domainObject.FirstObservedAtUtc)
-            .MinAsync(cancellationToken);
-        var lastObservedAtUtc = await dbContext.CuratedDomainObjects
-            .AsNoTracking()
-            .Select(domainObject => (DateTimeOffset?)domainObject.LastObservedAtUtc)
-            .MaxAsync(cancellationToken);
+        var firstObservedAtUtc = entityTypeRows.Count == 0
+            ? (DateTimeOffset?)null
+            : entityTypeRows.Min(row => row.FirstObservedAtUtc);
+        var lastObservedAtUtc = entityTypeRows.Count == 0
+            ? (DateTimeOffset?)null
+            : entityTypeRows.Max(row => row.LastObservedAtUtc);
 
         return new CuratedOverview(
             DateTimeOffset.UtcNow,
