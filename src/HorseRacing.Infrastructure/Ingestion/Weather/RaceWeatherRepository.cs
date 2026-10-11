@@ -15,15 +15,82 @@ public sealed partial class RaceWeatherRepository(HorseRacingDbContext dbContext
         DateOnly toDate,
         CancellationToken cancellationToken)
     {
-        var existingWeatherRaceIds = await dbContext.CuratedRaceWeather
+        var fromDateText = fromDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var toDateText = toDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var raceRows = await dbContext.CuratedDomainObjects
+            .FromSqlInterpolated($"""
+                SELECT race.*
+                FROM curated.domain_objects AS race
+                WHERE race.domain_object_type = {"Race"}
+                  AND (race.source_data -> 'foundData' ->> 'raceDate')
+                      BETWEEN {fromDateText} AND {toDateText}
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM curated.race_weather AS weather
+                      WHERE weather.curated_race_id = race.id)
+                """)
             .AsNoTracking()
-            .Select(weather => weather.CuratedRaceId)
+            .Select(item => new CuratedRow(
+                item.Id,
+                item.SourceSystem,
+                item.DomainObjectType,
+                item.SourceKey,
+                item.DisplayName,
+                item.SourceUrl,
+                item.RawPayloadId,
+                item.RawCollectionRunId,
+                item.SourceDataJson))
             .ToListAsync(cancellationToken);
-        var rows = await dbContext.CuratedDomainObjects
+        var races = raceRows
+            .Select(row => (Row: row, Race: ParseRace(row)))
+            .Where(item => item.Race is not null)
+            .Select(item => (item.Row, Race: item.Race!))
+            .ToList();
+        if (races.Count == 0)
+        {
+            return [];
+        }
+
+        var sourceSystems = races
+            .Select(item => item.Row.SourceSystem)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var meetingKeys = races
+            .Select(item => $"{item.Race.FixtureYear}:{item.Race.FixtureId}")
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var meetingRows = await dbContext.CuratedDomainObjects
             .AsNoTracking()
-            .Where(item => item.DomainObjectType == "Race"
-                || item.DomainObjectType == "Meeting"
-                || item.DomainObjectType == "Racecourse")
+            .Where(item => sourceSystems.Contains(item.SourceSystem)
+                && item.DomainObjectType == "Meeting"
+                && meetingKeys.Contains(item.SourceKey))
+            .Select(item => new CuratedRow(
+                item.Id,
+                item.SourceSystem,
+                item.DomainObjectType,
+                item.SourceKey,
+                item.DisplayName,
+                item.SourceUrl,
+                item.RawPayloadId,
+                item.RawCollectionRunId,
+                item.SourceDataJson))
+            .ToListAsync(cancellationToken);
+        var meetings = meetingRows
+            .Select(ParseMeeting)
+            .Where(meeting => meeting is not null)
+            .Select(meeting => meeting!)
+            .GroupBy(meeting => (meeting.Row.SourceSystem, meeting.FixtureYear, meeting.FixtureId))
+            .ToDictionary(group => group.Key, group => group.Last());
+
+        var courseKeys = meetings.Values
+            .Select(meeting => meeting.SourceCourseKey)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var courseRows = await dbContext.CuratedDomainObjects
+            .AsNoTracking()
+            .Where(item => sourceSystems.Contains(item.SourceSystem)
+                && item.DomainObjectType == "Racecourse"
+                && courseKeys.Contains(item.SourceKey))
             .Select(item => new CuratedRow(
                 item.Id,
                 item.SourceSystem,
@@ -36,30 +103,19 @@ public sealed partial class RaceWeatherRepository(HorseRacingDbContext dbContext
                 item.SourceDataJson))
             .ToListAsync(cancellationToken);
 
-        var courses = rows
-            .Where(row => row.Type == "Racecourse")
+        var courses = courseRows
             .Select(ParseCourse)
             .Where(course => course is not null)
             .Select(course => course!)
             .GroupBy(course => (course.Row.SourceSystem, course.SourceCourseKey))
             .ToDictionary(group => group.Key, group => group.Last());
-        var meetings = rows
-            .Where(row => row.Type == "Meeting")
-            .Select(ParseMeeting)
-            .Where(meeting => meeting is not null)
-            .Select(meeting => meeting!)
-            .GroupBy(meeting => (meeting.Row.SourceSystem, meeting.FixtureYear, meeting.FixtureId))
-            .ToDictionary(group => group.Key, group => group.Last());
-        var existing = existingWeatherRaceIds.ToHashSet();
         var targets = new List<RaceWeatherTarget>();
 
-        foreach (var row in rows.Where(row => row.Type == "Race" && !existing.Contains(row.Id)))
+        foreach (var item in races)
         {
-            var race = ParseRace(row);
-            if (race is null
-                || race.LocalDate < fromDate
-                || race.LocalDate > toDate
-                || !meetings.TryGetValue(
+            var row = item.Row;
+            var race = item.Race;
+            if (!meetings.TryGetValue(
                     (row.SourceSystem, race.FixtureYear, race.FixtureId),
                     out var meeting))
             {
@@ -128,19 +184,28 @@ public sealed partial class RaceWeatherRepository(HorseRacingDbContext dbContext
     }
 
     public async Task UpsertWeatherAsync(
-        RaceWeatherCapture capture,
+        IReadOnlyCollection<RaceWeatherCapture> captures,
         CancellationToken cancellationToken)
     {
-        var weather = await dbContext.CuratedRaceWeather.SingleOrDefaultAsync(
-            item => item.CuratedRaceId == capture.CuratedRaceId,
-            cancellationToken);
-        if (weather is null)
+        if (captures.Count == 0)
         {
-            dbContext.CuratedRaceWeather.Add(CuratedRaceWeather.Create(capture));
+            return;
         }
-        else
+
+        var raceIds = captures.Select(capture => capture.CuratedRaceId).ToArray();
+        var existing = await dbContext.CuratedRaceWeather
+            .Where(item => raceIds.Contains(item.CuratedRaceId))
+            .ToDictionaryAsync(item => item.CuratedRaceId, cancellationToken);
+        foreach (var capture in captures)
         {
-            weather.Apply(capture);
+            if (existing.TryGetValue(capture.CuratedRaceId, out var weather))
+            {
+                weather.Apply(capture);
+            }
+            else
+            {
+                dbContext.CuratedRaceWeather.Add(CuratedRaceWeather.Create(capture));
+            }
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);

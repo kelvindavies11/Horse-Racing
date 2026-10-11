@@ -77,6 +77,7 @@ public sealed class EnrichRaceWeatherHandler(
                 continue;
             }
 
+            var captures = new List<RaceWeatherCapture>();
             foreach (var target in group)
             {
                 var weather = interpreter.ReadWeather(
@@ -89,18 +90,21 @@ public sealed class EnrichRaceWeatherHandler(
                     continue;
                 }
 
-                await weatherRepository.UpsertWeatherAsync(
-                    new RaceWeatherCapture(
-                        target.CuratedRaceId,
-                        location.Id,
-                        target.RaceStartUtc,
-                        weather,
-                        sourceUri,
-                        collection.PayloadId.Value,
-                        collection.RunId,
-                        timeProvider.GetUtcNow()),
-                    cancellationToken);
+                captures.Add(new RaceWeatherCapture(
+                    target.CuratedRaceId,
+                    location.Id,
+                    target.RaceStartUtc,
+                    weather,
+                    sourceUri,
+                    collection.PayloadId.Value,
+                    collection.RunId,
+                    timeProvider.GetUtcNow()));
                 weatherRowsStored++;
+            }
+
+            if (captures.Count > 0)
+            {
+                await weatherRepository.UpsertWeatherAsync(captures, cancellationToken);
             }
         }
 
@@ -123,7 +127,7 @@ public sealed class EnrichRaceWeatherHandler(
                         target.Latitude.Value,
                         target.Longitude.Value,
                         "Europe/London",
-                        "BHA",
+                        target.SourceSystem,
                         new Uri(target.LocationSourceUrl),
                         target.LocationRawPayloadId,
                         target.LocationRawCollectionRunId,

@@ -39,7 +39,7 @@ public interface IRaceWeatherRepository
         CancellationToken cancellationToken);
 
     Task UpsertWeatherAsync(
-        RaceWeatherCapture capture,
+        IReadOnlyCollection<RaceWeatherCapture> captures,
         CancellationToken cancellationToken);
 }
 

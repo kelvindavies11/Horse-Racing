@@ -44,7 +44,17 @@ Trainer, Owner, and derived Stable object types used by the web application. Rec
 the `KaggleRaceform` source system so they cannot overwrite BHA records. The results read
 path accepts both sources and suppresses duplicate race cards when an overlapping BHA
 record is present. Weather enrichment can process the imported races through the existing
-weather job after promotion.
+weather job after promotion. For the pinned archive coverage, use the restartable monthly
+weather runner after the bulk job succeeds:
+
+```powershell
+./scripts/run-kaggle-raceform-weather.ps1 -From 2015-01-01 -To 2026-05-31
+```
+
+The weather runner skips completed months, retries transiently failed months, stores every
+Open-Meteo response in Raw, and writes race-hour observations through the normal Curated
+weather tables. It does not collect BHA race data; because it hosts `RaceDataSync`, the
+repository's documented public-token refresh must still be completed before it starts.
 
 The configured dataset version is deliberately pinned. Before changing the version,
 review the dataset page and its licence/usage conditions, update `KaggleRaceform` in
