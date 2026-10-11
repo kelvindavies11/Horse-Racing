@@ -3,12 +3,6 @@ param(
     [ValidatePattern('^\d{4}-\d{2}-\d{2}$')]
     [string] $ThroughDate,
 
-    [ValidateRange(2000, 2200)]
-    [int] $HistoryStartYear = 2020,
-
-    [ValidateRange(2000, 2200)]
-    [int] $HistoryEndYear = 2026,
-
     [ValidateRange(9000, 120000)]
     [int] $RequestDelayMilliseconds = 9000,
 
@@ -30,12 +24,8 @@ else {
     [datetime]::ParseExact($ThroughDate, 'yyyy-MM-dd', $culture)
 }
 
-if ($HistoryEndYear -lt $HistoryStartYear) {
-    throw 'HistoryEndYear must not be earlier than HistoryStartYear.'
-}
-
-$pastFrom = $today.AddMonths(-1)
-$pastTo = $today.AddDays(-1)
+$pastFrom = $today.AddDays(-7)
+$pastTo = $today
 $futureFrom = $today
 $futureTo = $today.AddMonths(1)
 $resultsPageUri = [uri]'https://www.britishhorseracing.com/racing/results/'
@@ -44,56 +34,6 @@ $apiProbeUri = [uri](
     ('?fields=fixtureId&year={0}&month={1}&page=1&per_page=1' -f
         $today.Year,
         $today.Month))
-
-function Get-MaximumSuccessfulCoverage([string] $Path) {
-    $coverage = @{}
-    if (-not (Test-Path -LiteralPath $Path)) {
-        return $coverage
-    }
-
-    foreach ($entry in Import-Csv -LiteralPath $Path | Where-Object Status -eq 'Succeeded') {
-        $entryTo = [datetime]::ParseExact($entry.To, 'yyyy-MM-dd', $culture)
-        if (-not $coverage.ContainsKey($entry.From) -or $entryTo -gt $coverage[$entry.From]) {
-            $coverage[$entry.From] = $entryTo
-        }
-    }
-
-    return $coverage
-}
-
-function Test-HistoricalBatchesComplete {
-    for ($year = $HistoryStartYear; $year -le $HistoryEndYear; $year++) {
-        $yearEnd = [datetime]::new($year, 12, 31)
-        $requiredThrough = if ($today -lt $yearEnd) { $today } else { $yearEnd }
-        if ($requiredThrough.Year -lt $year) {
-            continue
-        }
-
-        $statePath = Join-Path $repositoryRoot ("artifacts\{0}-results-sync" -f $year)
-        $rawCoverage = Get-MaximumSuccessfulCoverage (Join-Path $statePath 'progress.csv')
-        $weatherCoverage = Get-MaximumSuccessfulCoverage (Join-Path $statePath 'weather-progress.csv')
-        $cursor = [datetime]::new($year, 1, 1)
-        while ($cursor -le $requiredThrough) {
-            $monthEnd = $cursor.AddMonths(1).AddDays(-1)
-            $target = if ($requiredThrough -lt $monthEnd) { $requiredThrough } else { $monthEnd }
-            $from = $cursor.ToString('yyyy-MM-dd', $culture)
-            if (-not $rawCoverage.ContainsKey($from) -or
-                $rawCoverage[$from] -lt $target -or
-                -not $weatherCoverage.ContainsKey($from) -or
-                $weatherCoverage[$from] -lt $target) {
-                Write-Host (
-                    'Historical batches are not complete: {0} is not covered through {1} in both Raw/Curated and weather progress.' -f
-                    $from,
-                    $target.ToString('yyyy-MM-dd', $culture))
-                return $false
-            }
-
-            $cursor = $cursor.AddMonths(1)
-        }
-    }
-
-    return $true
-}
 
 function Get-ActiveImportProcesses {
     return @(Get-CimInstance Win32_Process | Where-Object {
@@ -207,17 +147,12 @@ function Invoke-RaceDataSync([string] $Mode, [datetime] $From, [datetime] $To) {
 }
 
 Write-Output (
-    'Rolling race window for {0}: recent results {1} through {2}; future details {3} through {4}.' -f
+    'Daily race window for {0}: results and details {1} through {2}; future details {3} through {4}.' -f
     $today.ToString('yyyy-MM-dd', $culture),
     $pastFrom.ToString('yyyy-MM-dd', $culture),
     $pastTo.ToString('yyyy-MM-dd', $culture),
     $futureFrom.ToString('yyyy-MM-dd', $culture),
     $futureTo.ToString('yyyy-MM-dd', $culture))
-
-if (-not (Test-HistoricalBatchesComplete)) {
-    Write-Output 'Rolling collection skipped; it will become eligible after every configured year batch is complete.'
-    return
-}
 
 if ((Get-ActiveImportProcesses).Count -gt 0) {
     Write-Output 'Rolling collection skipped because another race-data import is active.'
@@ -258,4 +193,4 @@ Set-AndValidatePublicBhaToken
 Invoke-RaceDataSync -Mode 'all' -From $pastFrom -To $pastTo
 Invoke-RaceDataSync -Mode 'upcoming' -From $futureFrom -To $futureTo
 
-Write-Output 'Rolling recent-results and future-race-details collection completed successfully.'
+Write-Output 'Daily recent-results and future-race-details collection completed successfully.'

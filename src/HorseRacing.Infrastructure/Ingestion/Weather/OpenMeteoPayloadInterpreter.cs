@@ -6,6 +6,34 @@ namespace HorseRacing.Infrastructure.Ingestion.Weather;
 
 public sealed class OpenMeteoPayloadInterpreter : IOpenMeteoPayloadInterpreter
 {
+    private static readonly IReadOnlyDictionary<string, string> CountryCodes =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["IRE"] = "IE", ["FR"] = "FR", ["USA"] = "US", ["AUS"] = "AU",
+            ["UAE"] = "AE", ["JPN"] = "JP", ["BRZ"] = "BR", ["NZ"] = "NZ",
+            ["SAF"] = "ZA", ["ARG"] = "AR", ["URU"] = "UY", ["PER"] = "PE",
+            ["CHI"] = "CL", ["HK"] = "HK"
+        };
+    private static readonly IReadOnlyDictionary<string, string> VenueCountryCodes =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["abudhabi"] = "AE", ["alain"] = "AE", ["jebelali"] = "AE", ["meydan"] = "AE",
+            ["aqueduct"] = "US", ["fairgrounds"] = "US", ["goldengatefields"] = "US",
+            ["gulfstream"] = "US", ["laurelpark"] = "US", ["oaklawn"] = "US",
+            ["samhouston"] = "US", ["santaanita"] = "US", ["sunland"] = "US",
+            ["tampabaydowns"] = "US", ["flemington"] = "AU", ["gosford"] = "AU",
+            ["mooneevalley"] = "AU", ["rosehill"] = "AU", ["cagnessurmer"] = "FR",
+            ["chantilly"] = "FR", ["deauville"] = "FR", ["pornichet"] = "FR",
+            ["chukyo"] = "JP", ["kawasaki"] = "JP", ["kyoto"] = "JP",
+            ["nakayama"] = "JP", ["ohi"] = "JP", ["cidadejardim"] = "BR",
+            ["gavea"] = "BR", ["cork"] = "IE", ["dundalk"] = "IE",
+            ["fairyhouse"] = "IE", ["gowranpark"] = "IE", ["leopardstown"] = "IE",
+            ["naas"] = "IE", ["navan"] = "IE", ["punchestown"] = "IE",
+            ["thurles"] = "IE", ["tramore"] = "IE", ["ellerslie"] = "NZ",
+            ["terapa"] = "NZ", ["trentham"] = "NZ", ["kenilworth"] = "ZA",
+            ["laplata"] = "AR", ["palermo"] = "AR", ["maronas"] = "UY",
+            ["monterrico"] = "PE", ["shatin"] = "HK", ["valparaiso"] = "CL"
+        };
     private const string HourlyVariables =
         "temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,rain," +
         "weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m";
@@ -13,12 +41,24 @@ public sealed class OpenMeteoPayloadInterpreter : IOpenMeteoPayloadInterpreter
     public Uri CreateGeocodingUri(string courseName, string? postcode)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(courseName);
+        var country = CountryCodes.FirstOrDefault(item =>
+            courseName.Contains($"({item.Key})", StringComparison.OrdinalIgnoreCase));
+        var cleanedName = System.Text.RegularExpressions.Regex.Replace(
+            courseName,
+            @"\s*\((?:AW|IRE|FR|USA|AUS|UAE|JPN|BRZ|NZ|SAF|ARG|URU|PER|CHI|HK)\)\s*",
+            " ",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+        var venueKey = new string(cleanedName.Where(char.IsLetterOrDigit)
+            .Select(char.ToLowerInvariant).ToArray());
+        var countryCode = !string.IsNullOrEmpty(country.Value)
+            ? country.Value
+            : VenueCountryCodes.GetValueOrDefault(venueKey, "GB");
         var search = string.IsNullOrWhiteSpace(postcode)
-            ? $"{courseName}, GB"
+            ? $"{cleanedName}, {countryCode}"
             : postcode;
         return new Uri(
             "https://geocoding-api.open-meteo.com/v1/search" +
-            $"?name={Uri.EscapeDataString(search)}&count=5&language=en&format=json&countryCode=GB");
+            $"?name={Uri.EscapeDataString(search)}&count=5&language=en&format=json&countryCode={countryCode}");
     }
 
     public Uri CreateHistoricalWeatherUri(
@@ -27,17 +67,14 @@ public sealed class OpenMeteoPayloadInterpreter : IOpenMeteoPayloadInterpreter
         DateOnly localDate,
         string timeZone)
     {
-        if (timeZone != "Europe/London")
-        {
-            throw new ArgumentException("British racing weather must use Europe/London.", nameof(timeZone));
-        }
+        _ = TimeZoneInfo.FindSystemTimeZoneById(timeZone);
 
         return new Uri(
             "https://archive-api.open-meteo.com/v1/archive" +
             $"?latitude={latitude.ToString(CultureInfo.InvariantCulture)}" +
             $"&longitude={longitude.ToString(CultureInfo.InvariantCulture)}" +
             $"&start_date={localDate:yyyy-MM-dd}&end_date={localDate:yyyy-MM-dd}" +
-            $"&hourly={HourlyVariables}&timezone=Europe%2FLondon&cell_selection=land");
+            $"&hourly={HourlyVariables}&timezone={Uri.EscapeDataString(timeZone)}&cell_selection=land");
     }
 
     public OpenMeteoLocationResult? ReadLocation(byte[] content)

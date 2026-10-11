@@ -149,7 +149,7 @@ function App() {
   const [page, setPage] = useState(1);
   const [selectedEntity, setSelectedEntity] = useState<CuratedEntity>();
   const deferredQuery = useDeferredValue(query);
-  const curated = useCuratedData(type, deferredQuery, page);
+  const curated = useCuratedData(view === "explore", type, deferredQuery, page);
   const audit = useAudit(view === "admin");
   const imports = useImportControl(view === "imports");
   const results = useRaceResults(view === "results");
@@ -764,7 +764,7 @@ const ImportControlPage = ({
   return <div className="page-wrap imports-page">
     <section className="hero hero--imports">
       <div><p className="kicker">Operations / guarded controls</p><h1>The queue,<br /><em>in plain sight.</em></h1></div>
-      <div className="hero-copy"><p>Watch every monthly runner move from queued to complete, then resume an eligible phase without opening a terminal.</p><span><i />One guarded phase · concentrated Raw runners · one Curated writer</span></div>
+      <div className="hero-copy"><p>Watch the daily race window refresh recent results and the next month of race details without opening a terminal.</p><span><i />One guarded daily run · Raw capture · Curated promotion</span></div>
     </section>
     {isLoading && <PageSkeleton />}
     {!isLoading && error && <ApiError message={error} onRetry={reload} />}
@@ -792,7 +792,7 @@ const ImportControlPage = ({
       </section>
 
       <section className="metric-strip import-metrics">
-        <Metric value={number.format(data.totalMonths)} label="Monthly runners" note="Across the active import plan" index="01" />
+        <Metric value={number.format(data.totalMonths)} label="Daily runners" note="Seven days back through one month ahead" index="01" />
         <Metric value={number.format(data.succeededMonths)} label="Succeeded" note={`${Math.round((data.succeededMonths / data.totalMonths) * 100)}% of the archive`} index="02" />
         <Metric value={number.format(data.failedMonths)} label="Need retry" note="Safe to resume by phase" index="03" />
         <Metric value={number.format(data.queuedMonths)} label="Still queued" note="Future and untouched months" index="04" />
@@ -801,7 +801,7 @@ const ImportControlPage = ({
       {actionMessage && <div className="import-action-message" role="status"><QueueIcon /><span>{actionMessage}</span></div>}
 
       <section className="section-block phase-section">
-        <div className="section-heading"><div><p className="kicker">Fixed dispatch plan</p><h2>Import phases</h2></div><p>Controls call only the repository’s reviewed resume scripts. A second confirmation is required before dispatch.</p></div>
+        <div className="section-heading"><div><p className="kicker">Daily dispatch plan</p><h2>Import schedule</h2></div><p>The guarded control refreshes the rolling date window. A second confirmation is required before dispatch.</p></div>
         <div className="phase-grid">
           {data.phases.map((phase, index) => <ImportPhaseCard
             key={phase.id}
@@ -817,16 +817,16 @@ const ImportControlPage = ({
 
       <section className="section-block import-queue-section">
         <div className="section-heading import-queue-heading">
-          <div><p className="kicker">{number.format(data.totalMonths)} monthly runners</p><h2>Dispatch queue</h2></div>
+          <div><p className="kicker">{number.format(data.totalMonths)} daily runner</p><h2>Dispatch queue</h2></div>
           <div className="queue-filters">
             <label><span>Phase</span><select value={phaseFilter} onChange={(event) => setPhaseFilter(event.target.value)}><option value="all">All phases</option>{data.phases.map((phase) => <option key={phase.id} value={phase.id}>{phase.name}</option>)}</select></label>
             <label><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">All states</option><option value="Waiting">Waiting</option><option value="Running">Running</option><option value="Succeeded">Succeeded</option><option value="Failed">Need retry</option><option value="Queued">Queued</option></select></label>
           </div>
         </div>
-        <div className="import-table" role="table" aria-label="Monthly import queue">
+        <div className="import-table" role="table" aria-label="Daily import queue">
           <div className="import-row import-row--head" role="row"><span>Runner</span><span>Phase</span><span>Status</span><span>Raw / download</span><span>Curated audit</span><span>Attempts</span><span>Started</span><span>Finished</span><span>Exit</span></div>
           {queuePages.pageItems.map((job) => <div className={`import-row import-row--${job.status.toLowerCase().replace(" ", "-")}`} role="row" key={job.id}>
-            <span><strong>{calendarMonth.format(new Date(`${job.month}-01T00:00:00Z`))}</strong><small>{job.from} → {job.to}</small></span>
+            <span><strong>{job.phaseId === "daily-window" ? "Daily window" : calendarMonth.format(new Date(`${job.month}-01T00:00:00Z`))}</strong><small>{job.from} → {job.to}</small></span>
             <span>{job.phaseName}</span>
             <span><Outcome value={job.status} /></span>
             <ImportAuditCell label="Raw" counts={job.auditCounts.raw} requestProgress={job.requestProgress} />

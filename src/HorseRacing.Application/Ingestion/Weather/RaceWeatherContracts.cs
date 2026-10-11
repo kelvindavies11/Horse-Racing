@@ -34,6 +34,10 @@ public interface IRaceWeatherRepository
         string sourceCourseKey,
         CancellationToken cancellationToken);
 
+    Task<StoredRacecourseLocation?> GetReferenceLocationAsync(
+        string courseName,
+        CancellationToken cancellationToken);
+
     Task<StoredRacecourseLocation> UpsertLocationAsync(
         RacecourseLocationCapture capture,
         CancellationToken cancellationToken);
@@ -49,6 +53,7 @@ public sealed record RaceWeatherTarget(
     string RaceName,
     DateTimeOffset RaceStartUtc,
     DateOnly LocalRaceDate,
+    TimeOnly LocalRaceTime,
     string SourceSystem,
     string SourceCourseKey,
     string CourseName,
@@ -66,7 +71,11 @@ public sealed record StoredRacecourseLocation(
     string CourseName,
     decimal Latitude,
     decimal Longitude,
-    string TimeZone);
+    string TimeZone,
+    string LocationSource,
+    string SourceUrl,
+    Guid RawPayloadId,
+    Guid RawCollectionRunId);
 
 public sealed record RacecourseLocationCapture(
     string SourceSystem,

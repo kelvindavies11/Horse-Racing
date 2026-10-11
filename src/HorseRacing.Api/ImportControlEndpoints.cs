@@ -76,9 +76,6 @@ public sealed class ImportControlService
     private static readonly Regex MonthArgumentPattern = new(
         @"--from\s+(?<month>\d{4}-\d{2})-\d{2}",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
-    private static readonly Regex SupervisorStartMonthPattern = new(
-        @"-StartMonth\s+""?(?<month>\d{4}-\d{2})",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
     private static readonly Regex ThrottleLogPattern = new(
         @"^(?<timestamp>\S+)\s+BHA API is (?:still )?throttled \(HTTP (?<status>\d+)\); waiting (?<minutes>\d+) minutes?\.$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
@@ -94,16 +91,7 @@ public sealed class ImportControlService
         PropertyNameCaseInsensitive = true,
     };
 
-    private static readonly ImportPhaseDefinition[] Definitions =
-    [
-        CreateYearPhase(2026, "A clean Raw-to-Curated pass for 2026, refreshed as new results become available."),
-        CreateYearPhase(2025, "Queued to begin automatically after the current 2026 pass reaches today's available results."),
-        CreateYearPhase(2024),
-        CreateYearPhase(2023),
-        CreateYearPhase(2022),
-        CreateYearPhase(2021),
-        CreateYearPhase(2020),
-    ];
+    private static ImportPhaseDefinition[] Definitions => [CreateDailyPhase()];
 
     private static readonly SemaphoreSlim StartLock = new(1, 1);
     private readonly HorseRacingDbContext dbContext;
@@ -122,9 +110,9 @@ public sealed class ImportControlService
 
     public async Task<ImportControlSnapshot> GetSnapshotAsync(CancellationToken cancellationToken)
     {
-        var auditCountsTask = GetAuditCountsAsync(cancellationToken);
         var observedProcesses = await GetImportProcessesAsync(cancellationToken);
-        var auditCounts = await auditCountsTask;
+        IReadOnlyDictionary<string, ImportRunnerAuditSummary> auditCounts =
+            new Dictionary<string, ImportRunnerAuditSummary>(StringComparer.Ordinal);
         var activeRawProcesses = observedProcesses
             .Where(process => process.CommandLine.Contains(
                 "HorseRacing.RaceDataSync",
@@ -510,7 +498,7 @@ public sealed class ImportControlService
             return null;
         }
 
-        var logPath = Path.Combine(repositoryRoot, definition.StateDirectory, "resume.stdout.log");
+        var logPath = Path.Combine(repositoryRoot, definition.StateDirectory, "run.stdout.log");
         if (!File.Exists(logPath))
         {
             return null;
@@ -634,55 +622,37 @@ public sealed class ImportControlService
         bool isImportRunning,
         bool isExecuting)
     {
-        var waitingMonthAssigned = false;
-        for (var month = definition.StartMonth; month <= definition.EndMonth; month = month.AddMonths(1))
-        {
-            var monthKey = month.ToString("yyyy-MM", CultureInfo.InvariantCulture);
-            var jobId = $"{definition.Id}:{monthKey}";
-            var attempts = rows.Where(row =>
-                row.From.Year == month.Year && row.From.Month == month.Month).ToArray();
-            var latest = attempts.LastOrDefault();
-            var hasActiveWorker = activeMonths.TryGetValue(monthKey, out var monthStartedAtUtc);
-            var isActive = activePhaseId == definition.Id && hasActiveWorker;
-            var isWaiting = !waitingMonthAssigned
-                && !isExecuting
-                && isImportRunning
-                && activePhaseId == definition.Id
-                && (latest is null
-                    || !string.Equals(latest.Status, "Succeeded", StringComparison.OrdinalIgnoreCase));
-            waitingMonthAssigned = waitingMonthAssigned || isWaiting;
-            var status = isActive
-                ? "Running"
-                : isWaiting
-                    ? "Waiting"
-                : latest is null
-                    ? "Queued"
-                    : string.Equals(latest.Status, "Succeeded", StringComparison.OrdinalIgnoreCase)
-                        ? "Succeeded"
-                        : "Failed";
-            var auditSummary = auditCounts.GetValueOrDefault(jobId) ?? ImportRunnerAuditSummary.Empty;
-
-            yield return new(
-                jobId,
-                definition.Id,
-                definition.Name,
-                monthKey,
-                month,
-                month.AddMonths(1).AddDays(-1),
-                status,
-                attempts.Length,
-                isActive ? monthStartedAtUtc : null,
-                latest?.CompletedAtUtc,
-                latest?.ExitCode,
-                auditSummary.Counts,
-                auditSummary.RequestProgress);
-        }
+        var monthKey = definition.StartMonth.ToString("yyyy-MM", CultureInfo.InvariantCulture);
+        var hasActiveWorker = activeMonths.TryGetValue(monthKey, out var monthStartedAtUtc);
+        var isActive = activePhaseId == definition.Id && hasActiveWorker;
+        var isWaiting = !isExecuting && isImportRunning && activePhaseId == definition.Id;
+        yield return new(
+            $"{definition.Id}:{definition.StartMonth:yyyy-MM-dd}",
+            definition.Id,
+            definition.Name,
+            monthKey,
+            definition.StartMonth,
+            definition.EndMonth,
+            isActive ? "Running" : isWaiting ? "Waiting" : "Queued",
+            0,
+            isActive ? monthStartedAtUtc : null,
+            null,
+            null,
+            ImportRunnerAuditCounts.Empty,
+            ImportRequestProgress.Empty);
     }
 
     private static string? FindActivePhaseId(
         IReadOnlyList<ObservedImportProcess> processes,
         ObservedImportProcess? raceDataProcess)
     {
+        if (processes.Any(process => process.CommandLine.Contains(
+                "run-rolling-race-window.ps1",
+                StringComparison.OrdinalIgnoreCase)))
+        {
+            return "daily-window";
+        }
+
         var activeMonth = GetActiveMonth(raceDataProcess);
         if (activeMonth is not null
             && DateOnly.TryParseExact(
@@ -693,29 +663,11 @@ public sealed class ImportControlService
                 out var monthDate))
         {
             return Definitions.FirstOrDefault(definition =>
-                monthDate >= definition.StartMonth && monthDate <= definition.EndMonth)?.Id;
+                activeMonth.CompareTo(definition.StartMonth.ToString("yyyy-MM", CultureInfo.InvariantCulture)) >= 0
+                && activeMonth.CompareTo(definition.EndMonth.ToString("yyyy-MM", CultureInfo.InvariantCulture)) <= 0)?.Id;
         }
 
-        var supervisor = processes.FirstOrDefault(process =>
-            process.CommandLine.Contains("resume-available-race-data-tail.ps1", StringComparison.OrdinalIgnoreCase)
-            || process.CommandLine.Contains("resume-monthly-race-data-history.ps1", StringComparison.OrdinalIgnoreCase));
-        if (supervisor is null)
-        {
-            return null;
-        }
-
-        var startMonth = SupervisorStartMonthPattern.Match(supervisor.CommandLine).Groups["month"].Value;
-        if (!DateOnly.TryParseExact(
-                $"{startMonth}-01",
-                "yyyy-MM-dd",
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.None,
-                out var startDate))
-        {
-            return null;
-        }
-
-        return Definitions.FirstOrDefault(definition => definition.StartMonth == startDate)?.Id;
+        return null;
     }
 
     private static string? GetActiveMonth(ObservedImportProcess? process)
@@ -744,7 +696,7 @@ public sealed class ImportControlService
                         ($_.CommandLine -match 'HorseRacing\.RaceDataSync' -or
                             $_.CommandLine -match 'HorseRacing\.Bha\.CuratedPromoter')
                     $isSupervisor = $_.Name -match '^pwsh(?:\.exe)?$' -and
-                        $_.CommandLine -match '-File\s+.*(?:resume-after-throttle|resume-monthly-race-data-history|resume-available-race-data-tail)\.ps1(?:"|\s|$)'
+                        $_.CommandLine -match '-File\s+.*(?:resume-after-throttle|resume-monthly-race-data-history|resume-available-race-data-tail|run-rolling-race-window)\.ps1(?:"|\s|$)'
                     $_.ProcessId -ne $PID -and
                     -not [string]::IsNullOrWhiteSpace($_.CommandLine) -and
                     ($isWorker -or $isSupervisor)
@@ -845,14 +797,18 @@ public sealed class ImportControlService
         throw new InvalidOperationException("The Horse Racing repository root could not be found.");
     }
 
-    private static ImportPhaseDefinition CreateYearPhase(int year, string? description = null) =>
-        new(
-            $"year-{year}",
-            $"{year} results",
-            description ?? $"A restartable Raw-to-Curated archive pass for {year}.",
-            new DateOnly(year, 1, 1),
-            new DateOnly(year, 12, 1),
-            $"artifacts/{year}-results-sync");
+    private static ImportPhaseDefinition CreateDailyPhase()
+    {
+        var london = TimeZoneInfo.FindSystemTimeZoneById("Europe/London");
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, london).DateTime);
+        return new(
+            "daily-window",
+            "Daily race window",
+            "Refreshes the previous seven days, today, and race details for the next month.",
+            today.AddDays(-7),
+            today.AddMonths(1),
+            "artifacts/daily-race-window");
+    }
 
     private static string SanitiseProcessMessage(string message)
     {

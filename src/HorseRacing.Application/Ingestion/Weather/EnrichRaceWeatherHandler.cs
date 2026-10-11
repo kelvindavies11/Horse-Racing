@@ -33,6 +33,38 @@ public sealed class EnrichRaceWeatherHandler(
                 sample.SourceSystem,
                 sample.SourceCourseKey,
                 cancellationToken);
+            if (sample.SourceSystem != "BHA")
+            {
+                var reference = await weatherRepository.GetReferenceLocationAsync(
+                    sample.CourseName,
+                    cancellationToken);
+                if (reference is not null)
+                {
+                    stored = await weatherRepository.UpsertLocationAsync(
+                        new RacecourseLocationCapture(
+                            sample.SourceSystem,
+                            sample.SourceCourseKey,
+                            sample.CourseName,
+                            sample.Postcode,
+                            reference.Latitude,
+                            reference.Longitude,
+                            reference.TimeZone,
+                            $"{reference.LocationSource} (matched BHA racecourse)",
+                            new Uri(reference.SourceUrl),
+                            reference.RawPayloadId,
+                            reference.RawCollectionRunId,
+                            timeProvider.GetUtcNow()),
+                        cancellationToken);
+                }
+                else if (string.Equals(
+                             stored?.LocationSource,
+                             "Open-Meteo / GeoNames",
+                             StringComparison.Ordinal))
+                {
+                    // Re-resolve locations created by the original GB-only lookup.
+                    stored = null;
+                }
+            }
             if (stored is null)
             {
                 stored = await ResolveLocationAsync(sample);
@@ -80,9 +112,13 @@ public sealed class EnrichRaceWeatherHandler(
             var captures = new List<RaceWeatherCapture>();
             foreach (var target in group)
             {
+                var raceStartUtc = ToUtc(
+                    target.LocalRaceDate,
+                    target.LocalRaceTime,
+                    location.TimeZone);
                 var weather = interpreter.ReadWeather(
                     collection.Content,
-                    target.RaceStartUtc,
+                    raceStartUtc,
                     location.TimeZone);
                 if (weather is null)
                 {
@@ -93,7 +129,7 @@ public sealed class EnrichRaceWeatherHandler(
                 captures.Add(new RaceWeatherCapture(
                     target.CuratedRaceId,
                     location.Id,
-                    target.RaceStartUtc,
+                    raceStartUtc,
                     weather,
                     sourceUri,
                     collection.PayloadId.Value,
@@ -154,7 +190,6 @@ public sealed class EnrichRaceWeatherHandler(
             var resolved = interpreter.ReadLocation(collection.Content);
             if (resolved is null)
             {
-                failedCollections++;
                 return null;
             }
 
@@ -167,7 +202,7 @@ public sealed class EnrichRaceWeatherHandler(
                     resolved.Latitude,
                     resolved.Longitude,
                     resolved.TimeZone,
-                    "Open-Meteo / GeoNames",
+                    "Open-Meteo / GeoNames v2",
                     sourceUri,
                     collection.PayloadId.Value,
                     collection.RunId,
@@ -176,7 +211,7 @@ public sealed class EnrichRaceWeatherHandler(
         }
     }
 
-    private static async Task<RawCollectionResult> CollectAsync(
+    private async Task<RawCollectionResult> CollectAsync(
         CollectRawSourceHandler collector,
         string jobName,
         string sourceName,
@@ -184,6 +219,15 @@ public sealed class EnrichRaceWeatherHandler(
         EnrichRaceWeatherCommand command,
         CancellationToken cancellationToken)
     {
+        var existing = await rawRepository.GetLatestSuccessfulAsync(
+            jobName,
+            sourceUri,
+            cancellationToken);
+        if (existing is not null)
+        {
+            return existing;
+        }
+
         var result = await collector.HandleAsync(
             new CollectRawSourceCommand(
                 jobName,
@@ -198,6 +242,13 @@ public sealed class EnrichRaceWeatherHandler(
         }
 
         return result;
+    }
+
+    private static DateTimeOffset ToUtc(DateOnly date, TimeOnly time, string timeZone)
+    {
+        var local = date.ToDateTime(time, DateTimeKind.Unspecified);
+        var zone = TimeZoneInfo.FindSystemTimeZoneById(timeZone);
+        return new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(local, zone));
     }
 
     private static string SafeToken(string value)

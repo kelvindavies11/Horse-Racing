@@ -7,7 +7,9 @@ public sealed class OpenMeteoWeatherTests
 {
     [Theory]
     [InlineData("https://geocoding-api.open-meteo.com/v1/search?name=Ascot%2C%20GB&count=5&language=en&format=json&countryCode=GB")]
+    [InlineData("https://geocoding-api.open-meteo.com/v1/search?name=Fairyhouse%2C%20IE&count=5&language=en&format=json&countryCode=IE")]
     [InlineData("https://archive-api.open-meteo.com/v1/archive?latitude=51.41&longitude=-0.67&start_date=2026-10-05&end_date=2026-10-05&hourly=temperature_2m&timezone=Europe%2FLondon&cell_selection=land")]
+    [InlineData("https://archive-api.open-meteo.com/v1/archive?latitude=35.67&longitude=139.74&start_date=2026-10-05&end_date=2026-10-05&hourly=temperature_2m&timezone=Asia%2FTokyo&cell_selection=land")]
     public void Source_validation_accepts_reviewed_open_meteo_endpoints(string candidate)
     {
         OpenMeteoRawSourceClient.ValidateSourceUri(new Uri(candidate));
@@ -16,7 +18,7 @@ public sealed class OpenMeteoWeatherTests
     [Theory]
     [InlineData("http://archive-api.open-meteo.com/v1/archive?latitude=51&longitude=0&start_date=2026-10-05&end_date=2026-10-05&timezone=Europe%2FLondon")]
     [InlineData("https://api.open-meteo.com/v1/forecast?latitude=51&longitude=0")]
-    [InlineData("https://geocoding-api.open-meteo.com/v1/search?name=Ascot&countryCode=US")]
+    [InlineData("https://geocoding-api.open-meteo.com/v1/search?name=Ascot&countryCode=XX")]
     [InlineData("https://archive-api.open-meteo.com/v1/archive?latitude=91&longitude=0&start_date=2026-10-05&end_date=2026-10-05&timezone=Europe%2FLondon")]
     [InlineData("https://archive-api.open-meteo.com/v1/archive?latitude=51&longitude=0&start_date=2026-10-04&end_date=2026-10-05&timezone=Europe%2FLondon")]
     public void Source_validation_rejects_unreviewed_open_meteo_locations(string candidate)
@@ -36,6 +38,28 @@ public sealed class OpenMeteoWeatherTests
         Assert.NotNull(location);
         Assert.Equal("Ascot", location.Name);
         Assert.Null(location.Postcode);
+    }
+
+    [Fact]
+    public void Geocoding_uri_removes_surface_tag_and_infers_country()
+    {
+        var interpreter = new OpenMeteoPayloadInterpreter();
+
+        var uri = interpreter.CreateGeocodingUri("Dundalk (AW) (IRE)", null);
+
+        Assert.Contains("name=Dundalk%2C%20IE", uri.AbsoluteUri);
+        Assert.Contains("countryCode=IE", uri.AbsoluteUri);
+    }
+
+    [Fact]
+    public void Geocoding_uri_infers_country_for_known_international_venue_without_suffix()
+    {
+        var interpreter = new OpenMeteoPayloadInterpreter();
+
+        var uri = interpreter.CreateGeocodingUri("Aqueduct", null);
+
+        Assert.Contains("name=Aqueduct%2C%20US", uri.AbsoluteUri);
+        Assert.Contains("countryCode=US", uri.AbsoluteUri);
     }
 
     [Fact]

@@ -55,7 +55,7 @@ export const curatedRepository = {
   },
 
   getEntities(type: string, search: string, page: number, signal?: AbortSignal) {
-    const parameters = new URLSearchParams({ page: String(page), pageSize: "60" });
+    const parameters = new URLSearchParams({ page: String(page), pageSize: "30" });
     if (type) parameters.set("type", type);
     if (search.trim()) parameters.set("search", search.trim());
     return readJson<CuratedEntityPage>(`/v1/curated/entities?${parameters}`, signal);

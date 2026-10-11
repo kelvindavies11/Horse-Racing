@@ -7,6 +7,9 @@ namespace HorseRacing.Infrastructure.Ingestion.Weather;
 public sealed class OpenMeteoRawSourceClient(HttpClient httpClient) : IOpenMeteoRawSourceClient
 {
     private const int MaximumResponseBytes = 5_000_000;
+    private static readonly HashSet<string> AllowedCountryCodes = new(
+        ["GB", "IE", "FR", "US", "AU", "AE", "JP", "BR", "NZ", "ZA", "AR", "UY", "PE", "CL", "HK"],
+        StringComparer.OrdinalIgnoreCase);
 
     public async Task<RawSourceResponse> GetAsync(
         Uri sourceUri,
@@ -66,7 +69,7 @@ public sealed class OpenMeteoRawSourceClient(HttpClient httpClient) : IOpenMeteo
             };
             if (query.Keys.All(allowed.Contains)
                 && !string.IsNullOrWhiteSpace(query.GetValueOrDefault("name"))
-                && query.GetValueOrDefault("countryCode") == "GB")
+                && AllowedCountryCodes.Contains(query.GetValueOrDefault("countryCode") ?? string.Empty))
             {
                 return;
             }
@@ -87,14 +90,36 @@ public sealed class OpenMeteoRawSourceClient(HttpClient httpClient) : IOpenMeteo
                 && DateOnly.TryParse(query.GetValueOrDefault("start_date"), out var start)
                 && DateOnly.TryParse(query.GetValueOrDefault("end_date"), out var end)
                 && start == end
-                && query.GetValueOrDefault("timezone") == "Europe/London")
+                && IsValidTimeZone(query.GetValueOrDefault("timezone")))
             {
                 return;
             }
         }
 
         throw new InvalidOperationException(
-            "This client is restricted to reviewed Open-Meteo GB geocoding and historical weather endpoints.");
+            "This client is restricted to reviewed Open-Meteo racing geocoding and historical weather endpoints.");
+    }
+
+    private static bool IsValidTimeZone(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        try
+        {
+            _ = TimeZoneInfo.FindSystemTimeZoneById(value);
+            return true;
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return false;
+        }
+        catch (InvalidTimeZoneException)
+        {
+            return false;
+        }
     }
 
     private static Dictionary<string, string> ParseQuery(string query) =>

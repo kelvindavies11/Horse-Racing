@@ -24,10 +24,18 @@ public sealed partial class RaceWeatherRepository(HorseRacingDbContext dbContext
                 WHERE race.domain_object_type = {"Race"}
                   AND (race.source_data -> 'foundData' ->> 'raceDate')
                       BETWEEN {fromDateText} AND {toDateText}
-                  AND NOT EXISTS (
-                      SELECT 1
-                      FROM curated.race_weather AS weather
-                      WHERE weather.curated_race_id = race.id)
+                  AND (
+                      NOT EXISTS (
+                          SELECT 1
+                          FROM curated.race_weather AS weather
+                          WHERE weather.curated_race_id = race.id)
+                      OR EXISTS (
+                          SELECT 1
+                          FROM curated.race_weather AS weather
+                          INNER JOIN curated.racecourse_locations AS location
+                              ON location.id = weather.racecourse_location_id
+                          WHERE weather.curated_race_id = race.id
+                            AND location.location_source = 'Open-Meteo / GeoNames'))
                 """)
             .AsNoTracking()
             .Select(item => new CuratedRow(
@@ -130,6 +138,7 @@ public sealed partial class RaceWeatherRepository(HorseRacingDbContext dbContext
                 row.DisplayName,
                 ToUtc(race.LocalDate, race.LocalTime),
                 race.LocalDate,
+                race.LocalTime,
                 row.SourceSystem,
                 meeting.SourceCourseKey,
                 meeting.CourseName,
@@ -158,6 +167,20 @@ public sealed partial class RaceWeatherRepository(HorseRacingDbContext dbContext
                 item.SourceSystem == sourceSystem
                 && item.SourceCourseKey == sourceCourseKey,
                 cancellationToken);
+        return location is null ? null : ToStored(location);
+    }
+
+    public async Task<StoredRacecourseLocation?> GetReferenceLocationAsync(
+        string courseName,
+        CancellationToken cancellationToken)
+    {
+        var referenceName = NormaliseCourseName(courseName);
+        var locations = await dbContext.CuratedRacecourseLocations
+            .AsNoTracking()
+            .Where(item => item.SourceSystem == "BHA")
+            .ToListAsync(cancellationToken);
+        var location = locations.FirstOrDefault(item =>
+            NormaliseCourseName(item.CourseName) == referenceName);
         return location is null ? null : ToStored(location);
     }
 
@@ -219,7 +242,33 @@ public sealed partial class RaceWeatherRepository(HorseRacingDbContext dbContext
             location.CourseName,
             location.Latitude,
             location.Longitude,
-            location.TimeZone);
+            location.TimeZone,
+            location.LocationSource,
+            location.SourceUrl,
+            location.RawPayloadId,
+            location.RawCollectionRunId);
+
+    private static string NormaliseCourseName(string value)
+    {
+        var withoutTags = Regex.Replace(value, @"\s*\([^)]*\)\s*", " ");
+        var token = new string(withoutTags
+            .Where(char.IsLetterOrDigit)
+            .Select(char.ToLowerInvariant)
+            .ToArray());
+        return token switch
+        {
+            "catterick" => "catterickbridge",
+            "chelmsford" => "chelmsfordcity",
+            "epsom" => "epsomdowns",
+            "greatyarmouth" => "yarmouth",
+            "hamilton" => "hamiltonpark",
+            "haydock" => "haydockpark",
+            "kempton" => "kemptonpark",
+            "lingfield" => "lingfieldpark",
+            "sandown" => "sandownpark",
+            _ => token
+        };
+    }
 
     private static ParsedCourse? ParseCourse(CuratedRow row)
     {

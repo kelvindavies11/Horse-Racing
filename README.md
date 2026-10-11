@@ -142,16 +142,21 @@ caches it under `.data/kaggle-raceform`, and records monthly source lineage. See
 [Kaggle Raceform bulk import guide](docs/KAGGLE-RACEFORM-IMPORT.md) for the dataset page,
 exact archive/database locations, fingerprint, coverage and weather follow-up command.
 
-After the configured 2020–2026 year batches are complete, the guarded rolling runner
-keeps the prediction window current:
+The guarded daily runner keeps the prediction window current:
 
 ```powershell
 ./scripts/run-rolling-race-window.ps1
 ```
 
-It revisits the previous calendar month for results and refreshes the next calendar
-month of fixtures, races, going and entries. It skips safely while historical work or
-another import is active. Future races are promoted into the same Curated records used
+Install the guarded Windows task (06:00 local time by default) with:
+
+```powershell
+./scripts/install-daily-race-window-task.ps1
+```
+
+It revisits the previous seven days plus today for results and refreshes the next
+calendar month of fixtures, races, going and entries. It skips safely while another
+import is active. Future races are promoted into the same Curated records used
 by the API and website; no result request is made for them.
 
 Start the website in a second terminal:

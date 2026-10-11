@@ -19,7 +19,7 @@ interface FoundationState {
 const messageFor = (error: unknown) =>
   error instanceof Error ? error.message : "The curated data could not be loaded.";
 
-export const useCuratedData = (type: string, search: string, page: number) => {
+export const useCuratedData = (active: boolean, type: string, search: string, page: number) => {
   const [reloadKey, setReloadKey] = useState(0);
   const [foundation, setFoundation] = useState<FoundationState>({ isLoading: true });
   const [entities, setEntities] = useState<CuratedEntityPage>();
@@ -27,6 +27,7 @@ export const useCuratedData = (type: string, search: string, page: number) => {
   const [entitiesLoading, setEntitiesLoading] = useState(true);
 
   useEffect(() => {
+    if (!active) return;
     const controller = new AbortController();
     setFoundation({ isLoading: true });
     Promise.all([
@@ -38,9 +39,10 @@ export const useCuratedData = (type: string, search: string, page: number) => {
         if (!controller.signal.aborted) setFoundation({ error: messageFor(error), isLoading: false });
       });
     return () => controller.abort();
-  }, [reloadKey]);
+  }, [active, reloadKey]);
 
   useEffect(() => {
+    if (!active) return;
     const controller = new AbortController();
     setEntitiesLoading(true);
     setEntitiesError(undefined);
@@ -57,7 +59,7 @@ export const useCuratedData = (type: string, search: string, page: number) => {
         }
       });
     return () => controller.abort();
-  }, [type, search, page, reloadKey]);
+  }, [active, type, search, page, reloadKey]);
 
   const reload = useCallback(() => setReloadKey((value) => value + 1), []);
 

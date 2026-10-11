@@ -13,16 +13,15 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
 {
     public async Task<CuratedOverview> GetOverviewAsync(CancellationToken cancellationToken)
     {
-        var entityTypeRows = await dbContext.CuratedDomainObjects
-            .AsNoTracking()
-            .GroupBy(domainObject => domainObject.DomainObjectType)
-            .Select(group => new
-            {
-                Type = group.Key,
-                Count = group.Count(),
-                FirstObservedAtUtc = group.Min(domainObject => domainObject.FirstObservedAtUtc),
-                LastObservedAtUtc = group.Max(domainObject => domainObject.LastObservedAtUtc)
-            })
+        var entityTypeRows = await dbContext.Database
+            .SqlQueryRaw<CuratedOverviewSummaryRow>(
+                """
+                SELECT domain_object_type AS "Type",
+                       entity_count AS "Count",
+                       first_observed_at_utc AS "FirstObservedAtUtc",
+                       last_observed_at_utc AS "LastObservedAtUtc"
+                FROM curated.domain_object_summaries
+                """)
             .OrderByDescending(summary => summary.Count)
             .ThenBy(summary => summary.Type)
             .ToListAsync(cancellationToken);
@@ -67,7 +66,9 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
                 || EF.Functions.ILike(domainObject.SourceKey, pattern));
         }
 
-        var totalCount = await query.CountAsync(cancellationToken);
+        var totalCount = string.IsNullOrWhiteSpace(request.Search)
+            ? await GetSummaryCountAsync(request.Type, cancellationToken)
+            : await query.CountAsync(cancellationToken);
         var rows = await query
             .OrderByDescending(domainObject => domainObject.LastObservedAtUtc)
             .ThenBy(domainObject => domainObject.DisplayName)
@@ -95,6 +96,25 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
             totalCount,
             (int)Math.Ceiling(totalCount / (double)pageSize),
             rows.Select(ToEntity).ToList());
+    }
+
+    private async Task<int> GetSummaryCountAsync(string? type, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(type))
+        {
+            return await dbContext.Database
+                .SqlQueryRaw<int>(
+                    "SELECT COALESCE(SUM(entity_count), 0)::int AS \"Value\" FROM curated.domain_object_summaries")
+                .SingleAsync(cancellationToken);
+        }
+
+        return await dbContext.Database
+            .SqlQuery<int>($"""
+                SELECT COALESCE(SUM(entity_count), 0)::int AS "Value"
+                FROM curated.domain_object_summaries
+                WHERE domain_object_type = {type.Trim()}
+                """)
+            .SingleAsync(cancellationToken);
     }
 
     public async Task<CuratedEntityConnections?> GetEntityConnectionsAsync(
@@ -1038,6 +1058,14 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
         DateTimeOffset FirstObservedAtUtc,
         DateTimeOffset LastObservedAtUtc,
         string SourceDataJson);
+
+    private sealed class CuratedOverviewSummaryRow
+    {
+        public string Type { get; init; } = string.Empty;
+        public int Count { get; init; }
+        public DateTimeOffset FirstObservedAtUtc { get; init; }
+        public DateTimeOffset LastObservedAtUtc { get; init; }
+    }
 
     private sealed record GraphRow(
         Guid Id,

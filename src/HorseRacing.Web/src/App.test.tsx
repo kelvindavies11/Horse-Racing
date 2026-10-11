@@ -218,53 +218,39 @@ const imports: ImportControlSnapshot = {
   runnerState: "Throttled",
   runnerMessage: "BHA returned HTTP 418. Requests are paused to respect the upstream limit.",
   nextRetryAtUtc: "2026-10-07T17:45:00Z",
-  activePhaseId: "year-2026",
+  activePhaseId: "daily-window",
   activeMonth: null,
   activeMonths: [],
   activeStartedAtUtc: "2026-10-07T17:30:00Z",
   activeProcessCount: 2,
   activeWorkerCount: 0,
   maximumWorkerCount: 2,
-  totalMonths: 84,
+  totalMonths: 1,
   succeededMonths: 0,
   failedMonths: 0,
-  queuedMonths: 83,
+  queuedMonths: 1,
   phases: [{
-    id: "year-2026",
-    name: "2026 results",
-    description: "A clean Raw-to-Curated pass for 2026, refreshed as new results become available.",
-    startMonth: "2026-01",
-    endMonth: "2026-12",
-    totalMonths: 12,
+    id: "daily-window",
+    name: "Daily race window",
+    description: "Refreshes the previous seven days, today, and race details for the next month.",
+    startMonth: "2026-09",
+    endMonth: "2026-11",
+    totalMonths: 1,
     succeededMonths: 0,
     failedMonths: 0,
-    queuedMonths: 12,
+    queuedMonths: 1,
     runningMonths: 0,
     status: "Waiting",
     canStart: false,
     startBlocker: "Another import phase owns the protected runner pool.",
-  }, ...[2025, 2024, 2023, 2022, 2021, 2020].map((year) => ({
-    id: `year-${year}`,
-    name: `${year} results`,
-    description: `A restartable Raw-to-Curated archive pass for ${year}.`,
-    startMonth: `${year}-01`,
-    endMonth: `${year}-12`,
-    totalMonths: 12,
-    succeededMonths: 0,
-    failedMonths: 0,
-    queuedMonths: 12,
-    runningMonths: 0,
-    status: "Queued",
-    canStart: false,
-    startBlocker: "Another import phase owns the protected runner pool.",
-  }))],
+  }],
   jobs: [{
-    id: "year-2026:2026-01",
-    phaseId: "year-2026",
-    phaseName: "2026 results",
-    month: "2026-01",
-    from: "2026-01-01",
-    to: "2026-01-31",
+    id: "daily-window:2026-10-04",
+    phaseId: "daily-window",
+    phaseName: "Daily race window",
+    month: "2026-10",
+    from: "2026-10-04",
+    to: "2026-11-11",
     status: "Waiting",
     attempts: 0,
     startedAtUtc: "2026-10-07T17:30:00Z",
@@ -449,12 +435,10 @@ describe("curated data workspace", () => {
     await screen.findByRole("heading", { name: "Observed records" });
     await user.click(screen.getByRole("button", { name: /Import control/i }));
 
-    expect(await screen.findByRole("heading", { level: 2, name: "2026 results" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 3, name: "2025 results" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 3, name: "2024 results" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 3, name: "2020 results" })).toBeInTheDocument();
-    expect(screen.getByRole("table", { name: "Monthly import queue" })).toBeInTheDocument();
-    expect(screen.getByText("January 2026")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 2, name: "Daily race window" })).toBeInTheDocument();
+    expect(screen.queryByText("2026 results")).not.toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Daily import queue" })).toBeInTheDocument();
+    expect(screen.getByText("Daily window")).toBeInTheDocument();
     expect(screen.getByText(/BHA returned HTTP 418/)).toBeInTheDocument();
     expect(screen.getByText(/Automatic retry scheduled for/)).toBeInTheDocument();
     expect(screen.getByText("Next retry")).toBeInTheDocument();

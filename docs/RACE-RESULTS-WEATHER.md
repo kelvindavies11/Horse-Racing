@@ -54,19 +54,24 @@ The resume process refreshes the public BHA results-client token using the offic
 
 The supervisor owns one phase at a time and normally runs one monthly Raw worker. All workers share a PostgreSQL-coordinated request gate, so BHA JSON API calls remain at least nine seconds apart across the whole pool, increasing to ten seconds for the active worker after throttling. Adding workers does not increase the upstream request rate. Fixture discovery requests use pages of 250 records to avoid unnecessary page calls. Completed months reuse successful payloads, which also prevents shared lookups from being downloaded once per worker; only a partial current month is refreshed as new results become available. A partial unique index prevents the same Raw job and source from running twice, while an orphaned five-minute-old claim is cancelled before retry. The single coordinator runs periodic and completion Curated drains, so they never overlap; Curated payload claims are unique, stale claims are recovered, and Curated writes also use a database advisory lock.
 
-The completed-year phases use `resume-monthly-race-data-history.ps1` with isolated state directories such as `artifacts/2025-results-sync`. Import Control shows request-level download coverage beside the Raw audit totals. The automation starts 2025 only after the current 2026 pass is caught up and the protected runner pool is free; use the web application's two-step control for 2024 through 2020.
+Import Control exposes one guarded `daily-window` action backed by
+`run-rolling-race-window.ps1`; the former yearly phases are no longer part of the active
+web workflow. Existing archive files remain available for audit and are not deleted.
 
 ## Rolling prediction window
 
-Once every configured 2020–2026 year batch has successful Raw/Curated and weather
-coverage, run the guarded rolling job daily:
+Run the guarded rolling job daily:
 
 ```powershell
 ./scripts/run-rolling-race-window.ps1
 ```
 
-For a run on date `D` in `Europe/London`, the first pass checks `D - 1 calendar month`
-through `D - 1 day` for result fixtures and missing race results. The second pass uses
+`install-daily-race-window-task.ps1` registers this runner in Windows Task
+Scheduler for 06:00 local time by default. The task uses the same process guard, so a
+still-running import causes a clean skip rather than a competing collection.
+
+For a run on date `D` in `Europe/London`, the first pass checks `D - 7 days` through
+`D` (including today) for result fixtures and missing race results. The second pass uses
 `--mode upcoming` for `D` through `D + 1 calendar month`. Upcoming mode omits the
 `resultsAvailable` fixture filter, then captures fixture races, going, race details and
 entries. It never requests a result for a future race, so an expected absence of future
