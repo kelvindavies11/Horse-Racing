@@ -25,6 +25,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HorseRacing.Bha.CuratedProm
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HorseRacing.RaceDataSync", "src\HorseRacing.RaceDataSync\HorseRacing.RaceDataSync.csproj", "{1AA49C2E-4CC2-4F2D-BCDC-E38CF69C403E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HorseRacing.KaggleDataSync", "src\HorseRacing.KaggleDataSync\HorseRacing.KaggleDataSync.csproj", "{6B4E16A8-15E0-43F5-AEA7-0F80F918C615}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -155,6 +157,18 @@ Global
 		{1AA49C2E-4CC2-4F2D-BCDC-E38CF69C403E}.Release|x64.Build.0 = Release|Any CPU
 		{1AA49C2E-4CC2-4F2D-BCDC-E38CF69C403E}.Release|x86.ActiveCfg = Release|Any CPU
 		{1AA49C2E-4CC2-4F2D-BCDC-E38CF69C403E}.Release|x86.Build.0 = Release|Any CPU
+		{6B4E16A8-15E0-43F5-AEA7-0F80F918C615}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6B4E16A8-15E0-43F5-AEA7-0F80F918C615}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6B4E16A8-15E0-43F5-AEA7-0F80F918C615}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{6B4E16A8-15E0-43F5-AEA7-0F80F918C615}.Debug|x64.Build.0 = Debug|Any CPU
+		{6B4E16A8-15E0-43F5-AEA7-0F80F918C615}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{6B4E16A8-15E0-43F5-AEA7-0F80F918C615}.Debug|x86.Build.0 = Debug|Any CPU
+		{6B4E16A8-15E0-43F5-AEA7-0F80F918C615}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6B4E16A8-15E0-43F5-AEA7-0F80F918C615}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6B4E16A8-15E0-43F5-AEA7-0F80F918C615}.Release|x64.ActiveCfg = Release|Any CPU
+		{6B4E16A8-15E0-43F5-AEA7-0F80F918C615}.Release|x64.Build.0 = Release|Any CPU
+		{6B4E16A8-15E0-43F5-AEA7-0F80F918C615}.Release|x86.ActiveCfg = Release|Any CPU
+		{6B4E16A8-15E0-43F5-AEA7-0F80F918C615}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -162,5 +176,6 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{CB941CEE-2535-4324-A05B-F1FAA99BDA90} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{1AA49C2E-4CC2-4F2D-BCDC-E38CF69C403E} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{6B4E16A8-15E0-43F5-AEA7-0F80F918C615} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

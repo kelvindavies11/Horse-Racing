@@ -26,6 +26,7 @@ public sealed partial class RaceWeatherRepository(HorseRacingDbContext dbContext
                 || item.DomainObjectType == "Racecourse")
             .Select(item => new CuratedRow(
                 item.Id,
+                item.SourceSystem,
                 item.DomainObjectType,
                 item.SourceKey,
                 item.DisplayName,
@@ -40,14 +41,14 @@ public sealed partial class RaceWeatherRepository(HorseRacingDbContext dbContext
             .Select(ParseCourse)
             .Where(course => course is not null)
             .Select(course => course!)
-            .GroupBy(course => course.SourceCourseKey, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(group => group.Key, group => group.Last(), StringComparer.OrdinalIgnoreCase);
+            .GroupBy(course => (course.Row.SourceSystem, course.SourceCourseKey))
+            .ToDictionary(group => group.Key, group => group.Last());
         var meetings = rows
             .Where(row => row.Type == "Meeting")
             .Select(ParseMeeting)
             .Where(meeting => meeting is not null)
             .Select(meeting => meeting!)
-            .GroupBy(meeting => (meeting.FixtureYear, meeting.FixtureId))
+            .GroupBy(meeting => (meeting.Row.SourceSystem, meeting.FixtureYear, meeting.FixtureId))
             .ToDictionary(group => group.Key, group => group.Last());
         var existing = existingWeatherRaceIds.ToHashSet();
         var targets = new List<RaceWeatherTarget>();
@@ -58,12 +59,14 @@ public sealed partial class RaceWeatherRepository(HorseRacingDbContext dbContext
             if (race is null
                 || race.LocalDate < fromDate
                 || race.LocalDate > toDate
-                || !meetings.TryGetValue((race.FixtureYear, race.FixtureId), out var meeting))
+                || !meetings.TryGetValue(
+                    (row.SourceSystem, race.FixtureYear, race.FixtureId),
+                    out var meeting))
             {
                 continue;
             }
 
-            courses.TryGetValue(meeting.SourceCourseKey, out var course);
+            courses.TryGetValue((row.SourceSystem, meeting.SourceCourseKey), out var course);
             var locationLineage = course?.Row ?? meeting.Row;
             targets.Add(new RaceWeatherTarget(
                 row.Id,
@@ -71,7 +74,7 @@ public sealed partial class RaceWeatherRepository(HorseRacingDbContext dbContext
                 row.DisplayName,
                 ToUtc(race.LocalDate, race.LocalTime),
                 race.LocalDate,
-                "BHA",
+                row.SourceSystem,
                 meeting.SourceCourseKey,
                 meeting.CourseName,
                 course?.Postcode,
@@ -184,20 +187,26 @@ public sealed partial class RaceWeatherRepository(HorseRacingDbContext dbContext
     private static ParsedRace? ParseRace(CuratedRow row)
     {
         var match = FixtureRacesUri().Match(row.SourceUrl);
-        if (!match.Success)
-        {
-            return null;
-        }
-
         using var document = JsonDocument.Parse(row.SourceDataJson);
         var data = GetFoundData(document.RootElement);
+        var fixtureYear = ReadInt(data, "fixtureYear");
+        var fixtureId = ReadInt(data, "fixtureId");
+        if (match.Success)
+        {
+            fixtureYear ??= int.TryParse(match.Groups["year"].Value, out var yearFromUrl)
+                ? yearFromUrl
+                : null;
+            fixtureId ??= int.TryParse(match.Groups["fixture"].Value, out var fixtureFromUrl)
+                ? fixtureFromUrl
+                : null;
+        }
         var dateText = ReadScalar(data, "raceDate");
         var timeText = ReadScalar(data, "raceTime");
-        return int.TryParse(match.Groups["year"].Value, out var fixtureYear)
-            && int.TryParse(match.Groups["fixture"].Value, out var fixtureId)
+        return fixtureYear is not null
+            && fixtureId is not null
             && DateOnly.TryParseExact(dateText, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)
             && TimeOnly.TryParseExact(timeText, "HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out var time)
-                ? new ParsedRace(fixtureYear, fixtureId, date, time)
+                ? new ParsedRace(fixtureYear.Value, fixtureId.Value, date, time)
                 : null;
     }
 
@@ -261,6 +270,7 @@ public sealed partial class RaceWeatherRepository(HorseRacingDbContext dbContext
 
     private sealed record CuratedRow(
         Guid Id,
+        string SourceSystem,
         string Type,
         string SourceKey,
         string DisplayName,

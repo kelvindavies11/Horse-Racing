@@ -125,34 +125,42 @@ public sealed class CuratedPromotionRepository(HorseRacingDbContext dbContext)
                 .Select(group => group.Last())
                 .ToList();
 
-            foreach (var domainObject in uniqueDomainObjects)
+            foreach (var group in uniqueDomainObjects.GroupBy(item => new
+                     {
+                         item.SourceSystem,
+                         item.DomainObjectType
+                     }))
             {
-                var existing = await dbContext.CuratedDomainObjects.SingleOrDefaultAsync(
-                    item =>
-                        item.SourceSystem == domainObject.SourceSystem
-                        && item.DomainObjectType == domainObject.DomainObjectType
-                        && item.SourceKey == domainObject.SourceKey,
-                    cancellationToken);
+                var sourceKeys = group.Select(item => item.SourceKey).ToArray();
+                var existingBySourceKey = await dbContext.CuratedDomainObjects
+                    .Where(item =>
+                        item.SourceSystem == group.Key.SourceSystem
+                        && item.DomainObjectType == group.Key.DomainObjectType
+                        && sourceKeys.Contains(item.SourceKey))
+                    .ToDictionaryAsync(item => item.SourceKey, StringComparer.Ordinal, cancellationToken);
 
-                if (existing is null)
+                foreach (var domainObject in group)
                 {
-                    dbContext.CuratedDomainObjects.Add(
-                        CuratedDomainObject.Create(
+                    if (!existingBySourceKey.TryGetValue(domainObject.SourceKey, out var existing))
+                    {
+                        dbContext.CuratedDomainObjects.Add(
+                            CuratedDomainObject.Create(
+                                domainObject,
+                                run.RawPayloadId,
+                                run.RawCollectionRunId,
+                                run.Id));
+                    }
+                    else
+                    {
+                        existing.ApplyObservation(
                             domainObject,
                             run.RawPayloadId,
                             run.RawCollectionRunId,
-                            run.Id));
-                }
-                else
-                {
-                    existing.ApplyObservation(
-                        domainObject,
-                        run.RawPayloadId,
-                        run.RawCollectionRunId,
-                        run.Id);
-                }
+                            run.Id);
+                    }
 
-                upsertedRecords++;
+                    upsertedRecords++;
+                }
             }
 
             run.Finish(completion with

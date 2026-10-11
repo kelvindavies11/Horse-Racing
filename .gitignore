@@ -34,6 +34,9 @@ Thumbs.db
 horse-racing-*.dump
 horse-racing-*.dump.partial
 
+## Downloaded bulk-source archives and extracted databases
+/.data/
+
 ## Frontend build output
 node_modules/
 dist/

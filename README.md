@@ -37,6 +37,7 @@ src/
   HorseRacing.Bha.RawCollector/ Manual BHA source-to-Raw console job
   HorseRacing.Bha.CuratedPromoter/ Manual Raw-to-Curated console job
   HorseRacing.RaceDataSync/      Historical results/location/weather sync
+  HorseRacing.KaggleDataSync/    Bulk archive-to-Raw-to-Curated sync
   HorseRacing.Api/             HTTP host and endpoints
   HorseRacing.Web/             React website and typed data-access layer
 tests/
@@ -127,6 +128,16 @@ refresh and validation procedure is documented in the
 [BHA Raw collector guide](docs/BHA-RAW-COLLECTOR.md#refresh-the-public-results-token);
 agents should perform it by default before a results import and never display or commit
 the token.
+
+For fast historical backfill without BHA request throttling, run the independent bulk job:
+
+```powershell
+./scripts/run-kaggle-raceform-import.ps1 -From 2017-01-01 -To 2025-12-31
+```
+
+It streams and fingerprints a pinned public Kaggle archive, captures restartable monthly
+Raw payloads, and promotes compatible Curated records. It does not call BHA or require a
+BHA bearer token. See the [Kaggle Raceform bulk import guide](docs/KAGGLE-RACEFORM-IMPORT.md).
 
 After the configured 2020–2026 year batches are complete, the guarded rolling runner
 keeps the prediction window current:

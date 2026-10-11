@@ -8,6 +8,18 @@ public sealed record CollectRawSourceCommand(
     TimeSpan MinimumRequestInterval,
     string? DispatchItemId = null);
 
+public sealed record CaptureRawPayloadCommand(
+    string JobName,
+    string SourceName,
+    Uri SourceUri,
+    Uri EffectiveUri,
+    string CollectorVersion,
+    string MediaType,
+    string CharacterEncoding,
+    byte[] Content,
+    string? DispatchItemId = null,
+    bool ReuseSuccessful = true);
+
 public sealed record RawCollectionStart(
     Guid RunId,
     string JobName,

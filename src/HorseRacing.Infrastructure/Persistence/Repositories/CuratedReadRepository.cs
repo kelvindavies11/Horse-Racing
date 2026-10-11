@@ -143,7 +143,8 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
             var related = await dbContext.CuratedDomainObjects
                 .AsNoTracking()
                 .SingleOrDefaultAsync(
-                    entity => entity.DomainObjectType == type
+                    entity => entity.SourceSystem == selected.SourceSystem
+                        && entity.DomainObjectType == type
                         && entity.SourceKey == sourceKey,
                     cancellationToken);
             if (related is not null)
@@ -168,6 +169,7 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
             var referrers = await dbContext.CuratedDomainObjects
                 .AsNoTracking()
                 .Where(entity => entity.DomainObjectType == sourceType
+                    && entity.SourceSystem == selected.SourceSystem
                     && EF.Functions.JsonContains(entity.SourceDataJson, fragment))
                 .OrderByDescending(entity => entity.LastObservedAtUtc)
                 .Take(requestedLimit + 1)
@@ -207,6 +209,7 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
             var directTargets = await dbContext.CuratedDomainObjects
                 .AsNoTracking()
                 .Where(entity => targetTypes.Contains(entity.DomainObjectType)
+                    && entity.SourceSystem == selected.SourceSystem
                     && (targetValues.Contains(entity.SourceKey)
                         || targetValues.Contains(entity.DisplayName)))
                 .ToListAsync(cancellationToken);
@@ -241,6 +244,7 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
             var runners = await dbContext.CuratedDomainObjects
                 .AsNoTracking()
                 .Where(entity => entity.DomainObjectType == "RunnerResult"
+                    && entity.SourceSystem == selected.SourceSystem
                     && entity.SourceKey.StartsWith(selected.SourceKey + ":"))
                 .OrderBy(entity => entity.SourceKey)
                 .Take(requestedLimit + 1)
@@ -263,6 +267,19 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
                     "meeting",
                     "outbound");
             }
+            else
+            {
+                var fixtureYear = ReadInt(sourceData, "fixtureYear");
+                var fixtureId = ReadInt(sourceData, "fixtureId");
+                if (fixtureYear is not null && fixtureId is not null)
+                {
+                    await AddByIdentityAsync(
+                        "Meeting",
+                        $"{fixtureYear}:{fixtureId}",
+                        "meeting",
+                        "outbound");
+                }
+            }
         }
         else if (selected.DomainObjectType == "Meeting")
         {
@@ -273,6 +290,7 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
                 var races = await dbContext.CuratedDomainObjects
                     .AsNoTracking()
                     .Where(entity => entity.DomainObjectType == "Race"
+                        && entity.SourceSystem == selected.SourceSystem
                         && entity.SourceUrl.EndsWith(suffix))
                     .OrderBy(entity => entity.SourceKey)
                     .Take(requestedLimit + 1)
@@ -284,6 +302,11 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
                 foreach (var race in races.Take(requestedLimit))
                 {
                     AddLink(race, "race", "outbound");
+                }
+
+                if (selected.SourceSystem == "KaggleRaceform")
+                {
+                    await AddJsonReferrersAsync("Race", "fixtureId", identity[1], "race");
                 }
             }
         }
@@ -387,7 +410,7 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
             .FromSqlInterpolated($"""
                 SELECT race.*
                 FROM curated.domain_objects AS race
-                WHERE race.source_system = {"BHA"}
+                WHERE race.source_system IN ('BHA', 'KaggleRaceform')
                   AND race.domain_object_type = {"Race"}
                   AND (race.source_data -> 'foundData' ->> 'raceDate')
                       BETWEEN {fromDateText} AND {toDateText}
@@ -395,6 +418,7 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
             .AsNoTracking()
             .Select(item => new ResultSourceRow(
                 item.Id,
+                item.SourceSystem,
                 item.DomainObjectType,
                 item.SourceKey,
                 item.DisplayName,
@@ -416,6 +440,10 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
             .Select(race => $"{race.FixtureYear}:{race.FixtureId}")
             .Distinct(StringComparer.Ordinal)
             .ToArray();
+        var sourceSystems = races
+            .Select(race => race.Row.SourceSystem)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
         var raceSourceKeys = races
             .Select(race => race.Row.SourceKey)
             .Distinct(StringComparer.Ordinal)
@@ -423,11 +451,12 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
 
         var meetingRows = await dbContext.CuratedDomainObjects
             .AsNoTracking()
-            .Where(item => item.SourceSystem == "BHA"
+            .Where(item => sourceSystems.Contains(item.SourceSystem)
                 && item.DomainObjectType == "Meeting"
                 && meetingSourceKeys.Contains(item.SourceKey))
             .Select(item => new ResultSourceRow(
                 item.Id,
+                item.SourceSystem,
                 item.DomainObjectType,
                 item.SourceKey,
                 item.DisplayName,
@@ -441,12 +470,13 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
                 JOIN unnest({raceSourceKeys}) AS race_key(value)
                   ON runner.source_key >= race_key.value || ':'
                  AND runner.source_key < race_key.value || ';'
-                WHERE runner.source_system = {"BHA"}
+                WHERE runner.source_system IN ('BHA', 'KaggleRaceform')
                   AND runner.domain_object_type IN ('Runner', 'RunnerResult')
                 """)
             .AsNoTracking()
             .Select(item => new ResultSourceRow(
                 item.Id,
+                item.SourceSystem,
                 item.DomainObjectType,
                 item.SourceKey,
                 item.DisplayName,
@@ -458,13 +488,13 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
             .Select(ParseResultMeeting)
             .Where(item => item is not null)
             .Select(item => item!)
-            .GroupBy(item => (item.FixtureYear, item.FixtureId))
+            .GroupBy(item => (item.SourceSystem, item.FixtureYear, item.FixtureId))
             .ToDictionary(group => group.Key, group => group.Last());
         var runners = runnerRows
             .Select(ParseRunnerResult)
             .Where(item => item is not null)
             .Select(item => item!)
-            .GroupBy(item => (item.RaceYear, item.RaceId, item.DivisionSequence))
+            .GroupBy(item => (item.SourceSystem, item.RaceYear, item.RaceId, item.DivisionSequence))
             .ToDictionary(
                 group => group.Key,
                 group => (IReadOnlyCollection<RunnerResultView>)group
@@ -485,56 +515,70 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
             .ToListAsync(cancellationToken);
         var weatherByRace = weatherRows.ToDictionary(weather => weather.CuratedRaceId);
 
-        var items = new List<CuratedRaceResult>();
+        var items = new List<(CuratedRaceResult Result, string SourceSystem)>();
         foreach (var race in races)
         {
-            if (!meetings.TryGetValue((race.FixtureYear, race.FixtureId), out var meeting))
+            if (!meetings.TryGetValue(
+                    (race.Row.SourceSystem, race.FixtureYear, race.FixtureId),
+                    out var meeting))
             {
                 continue;
             }
 
             var raceRunners = runners.GetValueOrDefault(
-                (race.RaceYear, race.RaceId, race.DivisionSequence)) ?? [];
+                (race.Row.SourceSystem, race.RaceYear, race.RaceId, race.DivisionSequence)) ?? [];
             weatherByRace.TryGetValue(race.Row.Id, out var weather);
-            items.Add(new CuratedRaceResult(
-                race.Row.Id,
-                race.Row.SourceKey,
-                $"{race.FixtureYear}:{race.FixtureId}",
-                race.Row.DisplayName,
-                meeting.CourseName,
-                ToUtc(race.LocalDate, race.LocalTime),
-                race.RaceType,
-                race.RaceClass,
-                race.Distance,
-                race.Going,
-                race.PrizeAmount,
-                race.PrizeCurrency,
-                race.Abandoned,
-                raceRunners.FirstOrDefault(item => item.FinishPosition == 1)?.HorseName,
-                weather is null
-                    ? null
-                    : new RacecourseLocationView(
-                        weather.RacecourseLocation.Latitude,
-                        weather.RacecourseLocation.Longitude,
-                        weather.RacecourseLocation.Postcode,
-                        weather.RacecourseLocation.LocationSource),
-                weather is null
-                    ? null
-                    : new RaceWeatherView(
-                        weather.WeatherHourUtc,
-                        weather.TemperatureC,
-                        weather.ApparentTemperatureC,
-                        weather.RelativeHumidityPercent,
-                        weather.PrecipitationMillimetres,
-                        weather.WeatherCode,
-                        weather.WindSpeedKilometresPerHour,
-                        weather.WindDirectionDegrees,
-                        weather.WindGustKilometresPerHour,
-                        weather.SourceUrl),
-                raceRunners));
+            items.Add((
+                new CuratedRaceResult(
+                    race.Row.Id,
+                    race.Row.SourceKey,
+                    $"{race.FixtureYear}:{race.FixtureId}",
+                    race.Row.DisplayName,
+                    meeting.CourseName,
+                    ToUtc(race.LocalDate, race.LocalTime),
+                    race.RaceType,
+                    race.RaceClass,
+                    race.Distance,
+                    race.Going,
+                    race.PrizeAmount,
+                    race.PrizeCurrency,
+                    race.Abandoned,
+                    raceRunners.FirstOrDefault(item => item.FinishPosition == 1)?.HorseName,
+                    weather is null
+                        ? null
+                        : new RacecourseLocationView(
+                            weather.RacecourseLocation.Latitude,
+                            weather.RacecourseLocation.Longitude,
+                            weather.RacecourseLocation.Postcode,
+                            weather.RacecourseLocation.LocationSource),
+                    weather is null
+                        ? null
+                        : new RaceWeatherView(
+                            weather.WeatherHourUtc,
+                            weather.TemperatureC,
+                            weather.ApparentTemperatureC,
+                            weather.RelativeHumidityPercent,
+                            weather.PrecipitationMillimetres,
+                            weather.WeatherCode,
+                            weather.WindSpeedKilometresPerHour,
+                            weather.WindDirectionDegrees,
+                            weather.WindGustKilometresPerHour,
+                            weather.SourceUrl),
+                    raceRunners),
+                race.Row.SourceSystem));
         }
 
         var ordered = items
+            .GroupBy(item => new
+            {
+                item.Result.StartUtc,
+                CourseName = item.Result.CourseName.ToUpperInvariant()
+            })
+            .Select(group => group
+                .OrderBy(item => item.SourceSystem == "BHA" ? 0 : 1)
+                .ThenBy(item => item.Result.Runners.Count == 0)
+                .ThenByDescending(item => item.Result.Weather is not null)
+                .First().Result)
             .OrderByDescending(item => item.StartUtc)
             .ThenBy(item => item.CourseName)
             .ThenBy(item => item.RaceName)
@@ -555,7 +599,7 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
             .FromSqlRaw("""
                 SELECT race.*
                 FROM curated.domain_objects AS race
-                WHERE race.source_system = 'BHA'
+                WHERE race.source_system IN ('BHA', 'KaggleRaceform')
                   AND race.domain_object_type = 'Race'
                   AND (race.source_data -> 'foundData' ->> 'raceDate') IS NOT NULL
                   AND EXISTS (
@@ -571,6 +615,7 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
             .AsNoTracking()
             .Select(item => new ResultSourceRow(
                 item.Id,
+                item.SourceSystem,
                 item.DomainObjectType,
                 item.SourceKey,
                 item.DisplayName,
@@ -695,7 +740,7 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
         var courseName = ReadText(data, "courseName", "racecourseName", "name");
         return year is null || id is null || courseName is null
             ? null
-            : new ParsedResultMeeting(year.Value, id.Value, courseName);
+            : new ParsedResultMeeting(row.SourceSystem, year.Value, id.Value, courseName);
     }
 
     private static ParsedResultRace? ParseResultRace(ResultSourceRow row)
@@ -759,6 +804,7 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
         }
 
         return new ParsedRunnerResult(
+            row.SourceSystem,
             raceYear.Value,
             raceId.Value,
             division,
@@ -1006,13 +1052,18 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
 
     private sealed record ResultSourceRow(
         Guid Id,
+        string SourceSystem,
         string Type,
         string SourceKey,
         string DisplayName,
         string SourceUrl,
         string SourceDataJson);
 
-    private sealed record ParsedResultMeeting(int FixtureYear, int FixtureId, string CourseName);
+    private sealed record ParsedResultMeeting(
+        string SourceSystem,
+        int FixtureYear,
+        int FixtureId,
+        string CourseName);
 
     private sealed record ParsedResultRace(
         ResultSourceRow Row,
@@ -1032,6 +1083,7 @@ public sealed partial class CuratedReadRepository(HorseRacingDbContext dbContext
         bool Abandoned);
 
     private sealed record ParsedRunnerResult(
+        string SourceSystem,
         int RaceYear,
         int RaceId,
         int DivisionSequence,

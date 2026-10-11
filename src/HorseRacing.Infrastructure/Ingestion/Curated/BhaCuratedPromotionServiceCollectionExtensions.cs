@@ -1,4 +1,5 @@
 using HorseRacing.Application.Ingestion.Curated;
+using HorseRacing.Infrastructure.Ingestion.Kaggle;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -15,10 +16,15 @@ public static class BhaCuratedPromotionServiceCollectionExtensions
             .Bind(configuration.GetSection(BhaCuratedPromotionOptions.SectionName))
             .Validate(ValidateOptions, "BHA curated promotion configuration is invalid.")
             .ValidateOnStart();
+        services
+            .AddOptions<KaggleRaceformOptions>()
+            .Bind(configuration.GetSection(KaggleRaceformOptions.SectionName));
 
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<ICuratedPromotionRepository, CuratedPromotionRepository>();
-        services.AddSingleton<ICuratedRawPayloadExtractor, BhaCuratedDomainObjectExtractor>();
+        services.AddSingleton<BhaCuratedDomainObjectExtractor>();
+        services.AddSingleton<KaggleRaceformCuratedExtractor>();
+        services.AddSingleton<ICuratedRawPayloadExtractor, RoutingCuratedRawPayloadExtractor>();
         services.AddScoped<PromoteRawPayloadsHandler>();
 
         return services;
