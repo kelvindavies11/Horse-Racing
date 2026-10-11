@@ -47,7 +47,7 @@ try
         "Starting Kaggle Raceform bulk sync from {FromDate} through {ToDate}. Completed monthly Raw chunks will be {ReuseMode}.",
         fromDate,
         toDate,
-        refreshRaw ? "replaced" : "reused");
+        refreshRaw ? "recaptured as new immutable payloads" : "reused");
     var archive = await downloader.GetAsync(shutdown.Token);
     await reader.PrepareAsync(archive.DatabasePath, shutdown.Token);
 
